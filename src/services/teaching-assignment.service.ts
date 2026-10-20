@@ -1,6 +1,7 @@
-// Who teaches which subject in which class. A teacher can hold many assignments (several subjects, several
-// classes); each subject in a class has exactly one teacher. Score entry only accepts scores from the
-// assigned teacher (or users with ENTER_ANY_SCORES).
+// Subject teacher assignments (SubjectTeacherAssignment): who is the primary teacher of a subject in a class
+// for an academic year. A teacher can hold many (several subjects, several classes); each subject in a class
+// has exactly one teacher per year. Score entry only accepts scores from the assigned teacher (or users with
+// ENTER_ANY_SCORES). The API calls the teacher `staffId`, like the rest of the API; the column is staffProfileId.
 import { Errors } from '../constants/errors';
 import { AcademicYearStatus, Prisma } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
@@ -20,7 +21,7 @@ export interface ListTeachingAssignmentsFilter {
 }
 
 const details = {
-  staff: { select: { id: true, khmerName: true, latinName: true } },
+  staffProfile: { select: { id: true, khmerName: true, latinName: true } },
   subject: { select: { id: true, code: true, khmerName: true, latinName: true } },
   classSection: {
     select: {
@@ -30,15 +31,15 @@ const details = {
       academicYear: { select: { id: true, name: true, status: true } },
     },
   },
-} satisfies Prisma.TeachingAssignmentInclude;
+} satisfies Prisma.SubjectTeacherAssignmentInclude;
 
-type AssignmentWithDetails = Prisma.TeachingAssignmentGetPayload<{ include: typeof details }>;
+type AssignmentWithDetails = Prisma.SubjectTeacherAssignmentGetPayload<{ include: typeof details }>;
 
 const classNameOf = (a: AssignmentWithDetails) => `${a.classSection.grade.gradeNumber}${a.classSection.sectionName}`;
 
 const auditSnapshot = (a: AssignmentWithDetails) => ({
-  staffId: a.staff.id,
-  teacher: `${a.staff.latinName} (${a.staff.khmerName})`,
+  staffProfileId: a.staffProfile.id,
+  teacher: `${a.staffProfile.latinName} (${a.staffProfile.khmerName})`,
   subjectId: a.subject.id,
   subject: a.subject.code,
   classSectionId: a.classSection.id,
@@ -53,8 +54,8 @@ const auditAssignment = (a: AssignmentWithDetails) =>
     entityLabel: `${a.subject.code} — ${classNameOf(a)} ${a.classSection.academicYear.name}`,
   }) as const;
 
-const ORDER: Prisma.TeachingAssignmentOrderByWithRelationInput[] = [
-  { classSection: { academicYear: { startDate: 'desc' } } },
+const ORDER: Prisma.SubjectTeacherAssignmentOrderByWithRelationInput[] = [
+  { academicYear: { startDate: 'desc' } },
   { classSection: { grade: { gradeNumber: 'asc' } } },
   { classSection: { sectionName: 'asc' } },
   { subject: { code: 'asc' } },
@@ -70,29 +71,27 @@ async function assertStaffExists(db: Prisma.TransactionClient, staffId: string) 
   if (!(await db.staffProfile.findUnique({ where: { id: staffId }, select: { id: true } }))) throw Errors.STAFF_NOT_FOUND();
 }
 
+// A class belongs to one academic year, so (subject, class) already identifies the (subject, class, year) slot
 async function assertSubjectFreeInClass(db: Prisma.TransactionClient, subjectId: string, classSectionId: string) {
-  const existing = await db.teachingAssignment.findUnique({
-    where: { subjectId_classSectionId: { subjectId, classSectionId } },
-    include: details,
-  });
+  const existing = await db.subjectTeacherAssignment.findFirst({ where: { subjectId, classSectionId }, include: details });
   if (existing) {
-    throw Errors.SUBJECT_ALREADY_TAUGHT(existing.subject.latinName, classNameOf(existing), existing.staff, existing.id);
+    throw Errors.SUBJECT_ALREADY_TAUGHT(existing.subject.latinName, classNameOf(existing), existing.staffProfile, existing.id);
   }
 }
 
 async function loadAssignment(db: Prisma.TransactionClient, id: string) {
-  const assignment = await db.teachingAssignment.findUnique({ where: { id }, include: details });
+  const assignment = await db.subjectTeacherAssignment.findUnique({ where: { id }, include: details });
   if (!assignment) throw Errors.TEACHING_ASSIGNMENT_NOT_FOUND();
   return assignment;
 }
 
 export function listTeachingAssignments(filter: ListTeachingAssignmentsFilter = {}) {
-  return prisma.teachingAssignment.findMany({
+  return prisma.subjectTeacherAssignment.findMany({
     where: {
-      staffId: filter.staffId,
+      staffProfileId: filter.staffId,
       subjectId: filter.subjectId,
       classSectionId: filter.classSectionId,
-      ...(filter.academicYearId && { classSection: { academicYearId: filter.academicYearId } }),
+      academicYearId: filter.academicYearId,
     },
     include: details,
     orderBy: ORDER,
@@ -119,7 +118,10 @@ export async function createTeachingAssignment(input: TeachingAssignmentInput) {
       if (classSection.grade.gradeSubjects.length === 0) throw Errors.SUBJECT_NOT_IN_GRADE(subject.latinName, classSection.grade.gradeNumber);
       await assertSubjectFreeInClass(tx, subject.id, classSection.id);
 
-      const created = await tx.teachingAssignment.create({ data: input, include: details });
+      const created = await tx.subjectTeacherAssignment.create({
+        data: { staffProfileId: input.staffId, subjectId: subject.id, classSectionId: classSection.id, academicYearId: classSection.academicYearId },
+        include: details,
+      });
       await audit(tx, { ...auditAssignment(created), action: 'TEACHING_ASSIGNMENT_CREATED', after: auditSnapshot(created) });
       return created;
     });
@@ -139,7 +141,7 @@ export async function reassignTeacher(id: string, staffId: string) {
     const current = await loadAssignment(tx, id);
     assertYearOpen(current.classSection.academicYear);
     await assertStaffExists(tx, staffId);
-    const updated = await tx.teachingAssignment.update({ where: { id }, data: { staffId }, include: details });
+    const updated = await tx.subjectTeacherAssignment.update({ where: { id }, data: { staffProfileId: staffId }, include: details });
     await audit(tx, { ...auditAssignment(updated), action: 'TEACHING_ASSIGNMENT_UPDATED', before: auditSnapshot(current), after: auditSnapshot(updated) });
     return updated;
   });
@@ -149,7 +151,7 @@ export async function deleteTeachingAssignment(id: string) {
   await prisma.$transaction(async (tx) => {
     const current = await loadAssignment(tx, id);
     assertYearOpen(current.classSection.academicYear);
-    await tx.teachingAssignment.delete({ where: { id } });
+    await tx.subjectTeacherAssignment.delete({ where: { id } });
     await audit(tx, { ...auditAssignment(current), action: 'TEACHING_ASSIGNMENT_DELETED', before: auditSnapshot(current) });
   });
 }

@@ -186,8 +186,8 @@ model StaffProfile {
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   // Relations
-  homeroomClasses     ClassSection[]       @relation("HomeroomTeacher")
-  teachingAssignments TeachingAssignment[]
+  homeroomClasses           ClassSection[]             @relation("HomeroomTeacher")
+  subjectTeacherAssignments SubjectTeacherAssignment[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -232,9 +232,10 @@ model AcademicYear {
   status    AcademicYearStatus @default(UPCOMING)
 
   // Relations
-  classes           ClassSection[]
-  enrollments       YearlyEnrollment[]
-  assessmentPeriods AssessmentPeriod[]
+  classes                   ClassSection[]
+  enrollments               YearlyEnrollment[]
+  assessmentPeriods         AssessmentPeriod[]
+  subjectTeacherAssignments SubjectTeacherAssignment[]
 
   @@map("academic_years")
 }
@@ -259,10 +260,10 @@ model Subject {
   isCoreSubject Boolean @default(true) @map("is_core_subject") // True = failing this means failing the year
 
   // Relations
-  gradeSubjects       GradeSubject[]
+  gradeSubjects             GradeSubject[]
   // Scoring rules live per assessment period, not on the subject (see SubjectAssessmentConfig)
-  assessmentConfigs   SubjectAssessmentConfig[]
-  teachingAssignments TeachingAssignment[]
+  assessmentConfigs         SubjectAssessmentConfig[]
+  subjectTeacherAssignments SubjectTeacherAssignment[]
 
   @@map("subjects")
 }
@@ -290,11 +291,11 @@ model ClassSection {
   homeroomTeacherId String? @map("homeroom_teacher_id")
 
   // Relations
-  grade               Grade                @relation(fields: [gradeId], references: [id])
-  academicYear        AcademicYear         @relation(fields: [academicYearId], references: [id])
-  homeroomTeacher     StaffProfile?        @relation("HomeroomTeacher", fields: [homeroomTeacherId], references: [id])
-  enrollments         YearlyEnrollment[]
-  teachingAssignments TeachingAssignment[]
+  grade                     Grade                      @relation(fields: [gradeId], references: [id])
+  academicYear              AcademicYear               @relation(fields: [academicYearId], references: [id])
+  homeroomTeacher           StaffProfile?              @relation("HomeroomTeacher", fields: [homeroomTeacherId], references: [id])
+  enrollments               YearlyEnrollment[]
+  subjectTeacherAssignments SubjectTeacherAssignment[]
 
   // A class section is unique per academic year (e.g., you can't have two 7A's in 2026)
   @@unique([gradeId, sectionName, academicYearId])
@@ -303,27 +304,32 @@ model ClassSection {
   @@map("class_sections")
 }
 
-// Who teaches which subject in which class (the class fixes grade and academic year). A teacher can
-// teach several subjects and classes; each subject in a class has exactly one teacher. Score entry
-// checks this: a teacher may only enter scores for their own subject in their own classes.
-model TeachingAssignment {
+// Who is the primary teacher of a subject in a class for an academic year. A teacher can teach several
+// subjects in several classes; each subject in a class has exactly one teacher per year. Score entry checks
+// this: a teacher may only enter scores for their own subject in their own classes.
+// academicYearId is always the class's own year: the service copies it from the class, never from the request.
+model SubjectTeacherAssignment {
   id             String @id @default(uuid())
-  staffId        String @map("staff_id")
+  staffProfileId String @map("staff_profile_id")
   subjectId      String @map("subject_id")
   classSectionId String @map("class_section_id")
+  academicYearId String @map("academic_year_id")
 
   // Relations
-  staff        StaffProfile @relation(fields: [staffId], references: [id])
+  staffProfile StaffProfile @relation(fields: [staffProfileId], references: [id])
   subject      Subject      @relation(fields: [subjectId], references: [id])
   classSection ClassSection @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  @@unique([subjectId, classSectionId])
-  @@index([staffId])
+  // One primary teacher per subject, class and year
+  @@unique([subjectId, classSectionId, academicYearId])
+  @@index([staffProfileId])
   @@index([classSectionId])
-  @@map("teaching_assignments")
+  @@index([academicYearId])
+  @@map("subject_teacher_assignments")
 }
 
 // ==========================================

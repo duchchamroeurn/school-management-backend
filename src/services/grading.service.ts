@@ -73,11 +73,17 @@ export async function recordSubjectScore(actor: ScoreActor, input: RecordSubject
 
     // ── Only the teacher assigned to this subject in the student's class (unless ENTER_ANY_SCORES) ──
     if (!actor.canEnterAnyScore) {
-      const assignment = await tx.teachingAssignment.findUnique({
-        where: { subjectId_classSectionId: { subjectId: config.subjectId, classSectionId: enrollment.classSectionId } },
-        select: { staff: { select: { userId: true } } },
+      const assignment = await tx.subjectTeacherAssignment.findUnique({
+        where: {
+          subjectId_classSectionId_academicYearId: {
+            subjectId: config.subjectId,
+            classSectionId: enrollment.classSectionId,
+            academicYearId: enrollment.academicYearId,
+          },
+        },
+        select: { staffProfile: { select: { userId: true } } },
       });
-      if (assignment?.staff.userId !== actor.userId) {
+      if (assignment?.staffProfile.userId !== actor.userId) {
         throw Errors.NOT_TEACHING_SUBJECT(subjectName, `${grade.gradeNumber}${enrollment.classSection.sectionName}`);
       }
     }
