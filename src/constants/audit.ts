@@ -24,6 +24,8 @@ export const AUDIT_ACTIONS = {
   SchoolSettings: ['SCHOOL_SETTINGS_UPDATED'],
   // entityId = the MonthlySubjectScore; before/after hold the total and each component score
   SubjectScore: ['SUBJECT_SCORE_RECORDED'],
+  // entityId = the class section; before/after map each student to their status (and whether leave excused it)
+  Attendance: ['ATTENDANCE_MARKED'],
 } as const;
 
 export type AuditEntityType = keyof typeof AUDIT_ACTIONS;

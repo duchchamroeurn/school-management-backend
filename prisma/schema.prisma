@@ -72,6 +72,21 @@ enum AcademicYearStatus {
   COMPLETED
 }
 
+// MoEYS attendance status (វត្តមាន)
+enum AttendanceStatus {
+  PRESENT // មក
+  LATE // មកយឺត
+  ABSENT_UNEXCUSED // អវត្តមានឥតច្បាប់
+  ABSENT_EXCUSED // អវត្តមានមានច្បាប់
+}
+
+enum LeaveRequestStatus {
+  PENDING
+  APPROVED // only approved leave excuses absences
+  REJECTED
+  CANCELLED
+}
+
 // ==========================================
 // SCHOOL SETTINGS (single row, id = 1)
 // ==========================================
@@ -212,7 +227,9 @@ model StudentProfile {
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   // Relations
-  enrollments YearlyEnrollment[]
+  enrollments       YearlyEnrollment[]
+  attendanceRecords AttendanceRecord[]
+  leaveRequests     LeaveRequest[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -264,6 +281,7 @@ model Subject {
   // Scoring rules live per assessment period, not on the subject (see SubjectAssessmentConfig)
   assessmentConfigs         SubjectAssessmentConfig[]
   subjectTeacherAssignments SubjectTeacherAssignment[]
+  attendanceRecords         AttendanceRecord[]
 
   @@map("subjects")
 }
@@ -296,6 +314,7 @@ model ClassSection {
   homeroomTeacher           StaffProfile?              @relation("HomeroomTeacher", fields: [homeroomTeacherId], references: [id])
   enrollments               YearlyEnrollment[]
   subjectTeacherAssignments SubjectTeacherAssignment[]
+  attendanceRecords         AttendanceRecord[]
 
   // A class section is unique per academic year (e.g., you can't have two 7A's in 2026)
   @@unique([gradeId, sectionName, academicYearId])
@@ -499,7 +518,59 @@ model MonthlyResult {
 }
 
 // ==========================================
-// 7. AUDIT LOG (append-only: the API never updates or deletes rows)
+// 7. ATTENDANCE (MoEYS)
+// ==========================================
+
+// One student's attendance on one date: daily gate attendance (subjectId = null, taken by the homeroom
+// teacher) or attendance for one subject's lesson (taken by that subject's teacher).
+// Deleting a student, class or subject with attendance is refused (Restrict), so records are never lost.
+model AttendanceRecord {
+  id             String           @id @default(uuid())
+  studentId      String           @map("student_id")
+  classSectionId String           @map("class_section_id")
+  subjectId      String?          @map("subject_id") // null = daily gate attendance
+  date           DateTime         @db.Date
+  status         AttendanceStatus
+  remarks        String? // e.g. reason given for being late
+
+  // Relations
+  student      StudentProfile @relation(fields: [studentId], references: [id])
+  classSection ClassSection   @relation(fields: [classSectionId], references: [id])
+  subject      Subject?       @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // One record per student, date and subject. PostgreSQL treats NULLs as distinct, so for daily records
+  // (subjectId = null) uniqueness is enforced by the service, which locks the class while marking.
+  @@unique([studentId, date, subjectId])
+  @@index([classSectionId, date])
+  @@index([studentId, date])
+  @@map("attendance_records")
+}
+
+// A student's leave (ច្បាប់ឈប់សម្រាក) from startDate to endDate, inclusive. While APPROVED, an absence on
+// any day in that range is recorded as ABSENT_EXCUSED instead of ABSENT_UNEXCUSED.
+model LeaveRequest {
+  id        String             @id @default(uuid())
+  studentId String             @map("student_id")
+  startDate DateTime           @map("start_date") @db.Date
+  endDate   DateTime           @map("end_date") @db.Date
+  reason    String? // e.g. illness, family event
+  status    LeaveRequestStatus @default(PENDING)
+
+  // Relations
+  student StudentProfile @relation(fields: [studentId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([studentId, status, startDate, endDate])
+  @@map("leave_requests")
+}
+
+// ==========================================
+// 8. AUDIT LOG (append-only: the API never updates or deletes rows)
 // ==========================================
 
 // Who changed what, and when. Deliberately has no foreign keys: actor and entity are copied

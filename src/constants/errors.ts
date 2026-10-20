@@ -115,7 +115,7 @@ const ERROR_DEFS = {
   ),
   ACADEMIC_YEAR_CLOSED: def(
     409,
-    (name: string, what: 'its classes' | 'its enrollments' | 'homeroom teachers' | 'its scores' | 'its teaching assignments') =>
+    (name: string, what: 'its classes' | 'its enrollments' | 'homeroom teachers' | 'its scores' | 'its teaching assignments' | 'its attendance') =>
       `Academic year ${name} is completed; ${what} can no longer be changed`,
   ),
   CLASS_IN_OTHER_YEAR: def(
@@ -343,6 +343,33 @@ const ERROR_DEFS = {
     details: fieldDetails('permissionCodes'),
   }),
   CANNOT_GRANT_PERMISSION: def(403, 'You can only grant permissions you hold yourself', { details: (notHeld: string[]) => ({ notHeld }) }),
+
+  // ── Attendance ──────────────────────────────────────────
+  ATTENDANCE_RECORDS_REQUIRED: def(400, 'records must contain at least one student', { code: 'VALIDATION_ERROR', details: fieldDetails('records') }),
+  DUPLICATE_STUDENTS_IN_REQUEST: def(400, 'Each student may appear only once in records', {
+    code: 'VALIDATION_ERROR',
+    details: (duplicated: string[]) => ({ field: 'records', duplicated }),
+  }),
+  ATTENDANCE_DATE_IN_FUTURE: def(400, (date: string) => `Attendance can't be recorded for a future date (${date})`, {
+    code: 'ATTENDANCE_DATE_INVALID',
+    details: fieldDetails('date'),
+  }),
+  ATTENDANCE_DATE_OUTSIDE_YEAR: def(
+    400,
+    (date: string, yearName: string, start: string, end: string) => `${date} is outside academic year ${yearName} (${start} – ${end})`,
+    { code: 'ATTENDANCE_DATE_INVALID', details: fieldDetails('date') },
+  ),
+  STUDENTS_NOT_IN_CLASS: def(
+    400,
+    (className: string, _studentIds: string[]) => `Some students are not currently enrolled in class ${className}`,
+    { details: (_c: string, studentIds: string[]) => ({ studentIds }) },
+  ),
+  NOT_HOMEROOM_TEACHER: def(403, (className: string) => `Only the homeroom teacher of class ${className} can take its daily attendance`),
+  NOT_TEACHING_SUBJECT_ATTENDANCE: def(
+    403,
+    (subjectName: string, className: string) => `You don't teach ${subjectName} in class ${className}, so you can't take its attendance`,
+    { code: 'NOT_TEACHING_SUBJECT' },
+  ),
 } satisfies Record<string, ErrorDef>;
 
 type ErrorDefs = typeof ERROR_DEFS;
