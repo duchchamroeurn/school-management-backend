@@ -7,6 +7,7 @@ import { requestContext } from './lib/requestContext';
 import { requestLogger } from './middlewares/requestLogger';
 import academicYearRoutes from './routes/academic-year.routes';
 import assignmentRoutes from './routes/assignment.routes';
+import { attendanceRoutes, leaveRequestRoutes } from './routes/attendance.routes';
 import auditLogRoutes from './routes/audit-log.routes';
 import authRoutes from './routes/auth.routes';
 import classSectionRoutes from './routes/class-section.routes';
@@ -58,6 +59,8 @@ app.use('/api/v1/enrollments', enrollmentRoutes);
 app.use('/api/v1/assignments', assignmentRoutes);
 app.use('/api/v1/teacher', teacherRoutes);
 app.use('/api/v1/scores', gradingRoutes);
+app.use('/api/v1/attendance', attendanceRoutes);
+app.use('/api/v1/leave-requests', leaveRequestRoutes);
 app.use('/api/v1/audit-logs', auditLogRoutes);
 
 app.use(notFound);

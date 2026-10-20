@@ -26,6 +26,8 @@ export const AUDIT_ACTIONS = {
   SubjectScore: ['SUBJECT_SCORE_RECORDED'],
   // entityId = the class section; before/after map each student to their status (and whether leave excused it)
   Attendance: ['ATTENDANCE_MARKED'],
+  // after.excusedAbsences / revertedAbsences = attendance records changed by approving / cancelling
+  LeaveRequest: ['LEAVE_REQUEST_CREATED', 'LEAVE_REQUEST_APPROVED', 'LEAVE_REQUEST_REJECTED', 'LEAVE_REQUEST_CANCELLED'],
 } as const;
 
 export type AuditEntityType = keyof typeof AUDIT_ACTIONS;

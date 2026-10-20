@@ -195,7 +195,10 @@ const ERROR_DEFS = {
   ALREADY_ENROLLED: def(409, (studentIdentifier?: string, yearName?: string) =>
     studentIdentifier ? `Student ${studentIdentifier} is already enrolled in academic year ${yearName}` : 'Student is already enrolled in this academic year',
   ),
-  STUDENT_NOT_ACTIVE: def(409, (studentIdentifier: string, status: string) => `Student ${studentIdentifier} is ${status} and cannot be enrolled`),
+  STUDENT_NOT_ACTIVE: def(
+    409,
+    (studentIdentifier: string, status: string, action: string = 'enrolled') => `Student ${studentIdentifier} is ${status} and cannot be ${action}`,
+  ),
   NOT_A_NEW_ADMISSION: def(
     409,
     (studentIdentifier: string) => `Student ${studentIdentifier} has previous enrollments; use promotion or repeating instead of NEW_ADMISSION`,
@@ -365,6 +368,17 @@ const ERROR_DEFS = {
     { details: (_c: string, studentIds: string[]) => ({ studentIds }) },
   ),
   NOT_HOMEROOM_TEACHER: def(403, (className: string) => `Only the homeroom teacher of class ${className} can take its daily attendance`),
+  NOT_CLASS_TEACHER: def(403, (className: string) => `You can only view attendance of classes you teach; you don't teach class ${className}`),
+  LEAVE_REQUEST_NOT_FOUND: def(404, 'Leave request not found'),
+  LEAVE_DATES_INVALID: def(400, 'endDate must be on or after startDate', { code: 'VALIDATION_ERROR', details: fieldDetails('endDate') }),
+  LEAVE_TOO_LONG: def(400, (maxDays: number) => `A leave request can cover at most ${maxDays} days`, { code: 'VALIDATION_ERROR', details: fieldDetails('endDate') }),
+  LEAVE_OVERLAP: def(
+    409,
+    (existing: { id: string; status: string; startDate: string; endDate: string }) =>
+      `The student already has a ${existing.status.toLowerCase()} leave request for ${existing.startDate} – ${existing.endDate}`,
+    { details: (existing: { id: string }) => ({ existingLeaveRequestId: existing.id }) },
+  ),
+  LEAVE_STATUS_INVALID: def(409, (status: string, action: string) => `A ${status.toLowerCase()} leave request can't be ${action}`),
   NOT_TEACHING_SUBJECT_ATTENDANCE: def(
     403,
     (subjectName: string, className: string) => `You don't teach ${subjectName} in class ${className}, so you can't take its attendance`,

@@ -139,7 +139,8 @@ export async function markClassAttendance(actor: AttendanceActor, input: MarkCla
     for (const entry of input.records) {
       const leaveRequestId = entry.status === AttendanceStatus.ABSENT_UNEXCUSED ? onLeave.get(entry.studentId) : undefined;
       const status = leaveRequestId ? AttendanceStatus.ABSENT_EXCUSED : entry.status;
-      const data = { classSectionId: classSection.id, status, remarks: entry.remarks ?? null };
+      // The link lets cancelling that leave revert exactly the absences it excused
+      const data = { classSectionId: classSection.id, status, remarks: entry.remarks ?? null, leaveRequestId: leaveRequestId ?? null };
       const previous = existing.get(entry.studentId);
       const saved = previous
         ? await tx.attendanceRecord.update({ where: { id: previous.id }, data })
@@ -183,4 +184,125 @@ export async function markClassAttendance(actor: AttendanceActor, input: MarkCla
       records: results,
     };
   });
+}
+
+// ==========================================
+// READ
+// ==========================================
+
+export interface AttendanceViewer {
+  staffProfileId: string | null;
+  canViewAny: boolean; // VIEW_ANY_ATTENDANCE; otherwise only classes the user teaches
+}
+
+const statusCounts = (statuses: AttendanceStatus[]) => ({
+  present: statuses.filter((s) => s === AttendanceStatus.PRESENT).length,
+  late: statuses.filter((s) => s === AttendanceStatus.LATE).length,
+  absentUnexcused: statuses.filter((s) => s === AttendanceStatus.ABSENT_UNEXCUSED).length,
+  absentExcused: statuses.filter((s) => s === AttendanceStatus.ABSENT_EXCUSED).length,
+});
+
+/**
+ * The attendance sheet of one class for one date (daily, or one subject): every active student, their
+ * recorded status (null = not marked yet) and any approved leave covering that date, so a screen can
+ * pre-fill excused absences before the teacher saves.
+ */
+export async function getClassAttendance(viewer: AttendanceViewer, classSectionId: string, date: Date, subjectId: string | null) {
+  const classSection = await prisma.classSection.findUnique({
+    where: { id: classSectionId },
+    include: { grade: true, academicYear: true, subjectTeacherAssignments: { select: { staffProfileId: true } } },
+  });
+  if (!classSection) throw Errors.CLASS_SECTION_NOT_FOUND();
+  const className = `${classSection.grade.gradeNumber}${classSection.sectionName}`;
+
+  // Own classes = homeroom teacher of the class, or teaching any subject in it
+  if (!viewer.canViewAny) {
+    const teaches =
+      !!viewer.staffProfileId &&
+      (classSection.homeroomTeacherId === viewer.staffProfileId ||
+        classSection.subjectTeacherAssignments.some((a) => a.staffProfileId === viewer.staffProfileId));
+    if (!teaches) throw Errors.NOT_CLASS_TEACHER(className);
+  }
+
+  const subject = subjectId ? await prisma.subject.findUnique({ where: { id: subjectId } }) : null;
+  if (subjectId && !subject) throw Errors.SUBJECT_NOT_FOUND();
+
+  const enrollments = await prisma.yearlyEnrollment.findMany({
+    where: { classSectionId, student: { status: StudentStatus.ENROLLED } },
+    include: { student: { select: { id: true, studentIdentifier: true, khmerName: true, latinName: true, gender: true } } },
+    orderBy: { student: { khmerName: 'asc' } },
+  });
+  const studentIds = enrollments.map((e) => e.studentId);
+  const [records, leaves] = await Promise.all([
+    prisma.attendanceRecord.findMany({ where: { studentId: { in: studentIds }, date, subjectId } }),
+    prisma.leaveRequest.findMany({
+      where: { studentId: { in: studentIds }, status: LeaveRequestStatus.APPROVED, startDate: { lte: date }, endDate: { gte: date } },
+      select: { id: true, studentId: true, startDate: true, endDate: true, reason: true },
+    }),
+  ]);
+  const recordOf = new Map(records.map((r) => [r.studentId, r]));
+  const leaveOf = new Map(leaves.map((l) => [l.studentId, l]));
+
+  const students = enrollments.map((e, i) => {
+    const record = recordOf.get(e.studentId);
+    const leave = leaveOf.get(e.studentId);
+    return {
+      no: i + 1,
+      ...e.student,
+      status: record?.status ?? null, // null = not marked yet
+      remarks: record?.remarks ?? null,
+      attendanceRecordId: record?.id ?? null,
+      approvedLeave: leave ? { id: leave.id, startDate: isoDate(leave.startDate), endDate: isoDate(leave.endDate), reason: leave.reason } : null,
+    };
+  });
+  const marked = students.filter((s) => s.status !== null);
+
+  return {
+    classSection: { id: classSection.id, name: className, academicYear: classSection.academicYear.name },
+    date: isoDate(date),
+    subject: subject && { id: subject.id, code: subject.code, khmerName: subject.khmerName, latinName: subject.latinName },
+    summary: {
+      students: students.length,
+      marked: marked.length,
+      notMarked: students.length - marked.length,
+      onApprovedLeave: leaves.length,
+      ...statusCounts(marked.map((s) => s.status!)),
+    },
+    students,
+  };
+}
+
+/** One student's attendance between two dates (inclusive), with totals for daily attendance. */
+export async function getStudentAttendance(studentId: string, from: Date, to: Date) {
+  const student = await prisma.studentProfile.findUnique({
+    where: { id: studentId },
+    select: { id: true, studentIdentifier: true, khmerName: true, latinName: true },
+  });
+  if (!student) throw Errors.STUDENT_NOT_FOUND();
+
+  const records = await prisma.attendanceRecord.findMany({
+    where: { studentId, date: { gte: from, lte: to } },
+    include: {
+      classSection: { select: { sectionName: true, grade: { select: { gradeNumber: true } } } },
+      subject: { select: { id: true, code: true, latinName: true } },
+    },
+    orderBy: [{ date: 'asc' }, { subjectId: 'asc' }],
+  });
+
+  return {
+    student,
+    from: isoDate(from),
+    to: isoDate(to),
+    // Totals count daily (gate) attendance only, so one absent day counts once however many lessons it covers
+    dailyTotals: { days: records.filter((r) => !r.subjectId).length, ...statusCounts(records.filter((r) => !r.subjectId).map((r) => r.status)) },
+    records: records.map((r) => ({
+      id: r.id,
+      date: isoDate(r.date),
+      classSection: `${r.classSection.grade.gradeNumber}${r.classSection.sectionName}`,
+      subject: r.subject, // null = daily attendance
+      status: r.status,
+      remarks: r.remarks,
+      leaveRequestId: r.leaveRequestId,
+    })),
+  };
 }

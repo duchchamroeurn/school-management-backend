@@ -22,7 +22,7 @@ import { hashPassword } from './password';
 
 const SYSTEM_ADMIN_ROLE = 'System Admin';
 
-const { USER, ROLE, STUDENT } = PERMISSIONS;
+const { USER, ROLE, STUDENT, ATTENDANCE, LEAVE_REQUEST } = PERMISSIONS;
 const OWN_PROFILE = PERMISSIONS.SELF_SERVICE.VIEW_OWN_PROFILE;
 const OWN_HOMEROOM = PERMISSIONS.SELF_SERVICE.VIEW_OWN_HOMEROOM;
 const ACADEMIC_REFERENCE = ['SUBJECT', 'GRADE', 'ACADEMIC_YEAR', 'CLASS_SECTION'] as const;
@@ -53,13 +53,25 @@ const ROLES: { latinName: string; khmerName: string; permissions: PermissionCode
       STUDENT.UPDATE,
       ...fullAccess('ENROLLMENT'),
       ...readOnly(...ACADEMIC_REFERENCE),
+      ATTENDANCE.VIEW_ANY,
+      LEAVE_REQUEST.LIST,
+      LEAVE_REQUEST.CREATE,
       OWN_PROFILE,
     ],
   },
   {
     latinName: 'Teacher',
     khmerName: 'គ្រូបង្រៀន',
-    permissions: [...readOnly('STUDENT', 'ENROLLMENT', ...ACADEMIC_REFERENCE), OWN_PROFILE, OWN_HOMEROOM, PERMISSIONS.SCORE.ENTER],
+    permissions: [
+      ...readOnly('STUDENT', 'ENROLLMENT', ...ACADEMIC_REFERENCE),
+      OWN_PROFILE,
+      OWN_HOMEROOM,
+      PERMISSIONS.SCORE.ENTER,
+      ATTENDANCE.MARK,
+      ATTENDANCE.VIEW,
+      LEAVE_REQUEST.LIST,
+      LEAVE_REQUEST.CREATE,
+    ],
   },
   { latinName: 'Student', khmerName: 'សិស្ស', permissions: [OWN_PROFILE] },
 ];

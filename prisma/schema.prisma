@@ -532,11 +532,14 @@ model AttendanceRecord {
   date           DateTime         @db.Date
   status         AttendanceStatus
   remarks        String? // e.g. reason given for being late
+  // Set when an approved leave turned this absence into ABSENT_EXCUSED; cancelling that leave reverts it
+  leaveRequestId String?          @map("leave_request_id")
 
   // Relations
   student      StudentProfile @relation(fields: [studentId], references: [id])
   classSection ClassSection   @relation(fields: [classSectionId], references: [id])
   subject      Subject?       @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  leaveRequest LeaveRequest?  @relation(fields: [leaveRequestId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -546,6 +549,7 @@ model AttendanceRecord {
   @@unique([studentId, date, subjectId])
   @@index([classSectionId, date])
   @@index([studentId, date])
+  @@index([leaveRequestId])
   @@map("attendance_records")
 }
 
@@ -560,7 +564,8 @@ model LeaveRequest {
   status    LeaveRequestStatus @default(PENDING)
 
   // Relations
-  student StudentProfile @relation(fields: [studentId], references: [id])
+  student           StudentProfile     @relation(fields: [studentId], references: [id])
+  excusedAttendance AttendanceRecord[] // absences this leave excused
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

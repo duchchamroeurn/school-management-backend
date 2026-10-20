@@ -48,6 +48,10 @@ export const PERMISSIONS = {
   AUDIT_LOG: { LIST: 'LIST_AUDIT_LOGS' },
   // ENTER: only for subjects and classes the user teaches; ENTER_ANY: any subject and class (corrections)
   SCORE: { ENTER: 'ENTER_SCORES', ENTER_ANY: 'ENTER_ANY_SCORES' },
+  // MARK / VIEW: only classes the user teaches (homeroom = daily, assigned subject = that subject); *_ANY: any class
+  ATTENDANCE: { MARK: 'MARK_ATTENDANCE', MARK_ANY: 'MARK_ANY_ATTENDANCE', VIEW: 'VIEW_ATTENDANCE', VIEW_ANY: 'VIEW_ANY_ATTENDANCE' },
+  // CREATE records a leave request (PENDING); REVIEW approves, rejects or cancels it
+  LEAVE_REQUEST: { LIST: 'LIST_LEAVE_REQUESTS', CREATE: 'CREATE_LEAVE_REQUEST', REVIEW: 'REVIEW_LEAVE_REQUEST' },
 } as const;
 
 export type PermissionCode =
@@ -55,7 +59,9 @@ export type PermissionCode =
   | (typeof PERMISSIONS.SELF_SERVICE)[keyof typeof PERMISSIONS.SELF_SERVICE]
   | typeof PERMISSIONS.SCHOOL_SETTINGS.UPDATE
   | typeof PERMISSIONS.AUDIT_LOG.LIST
-  | (typeof PERMISSIONS.SCORE)[keyof typeof PERMISSIONS.SCORE];
+  | (typeof PERMISSIONS.SCORE)[keyof typeof PERMISSIONS.SCORE]
+  | (typeof PERMISSIONS.ATTENDANCE)[keyof typeof PERMISSIONS.ATTENDANCE]
+  | (typeof PERMISSIONS.LEAVE_REQUEST)[keyof typeof PERMISSIONS.LEAVE_REQUEST];
 
 export interface PermissionDefinition {
   module: string;
@@ -77,6 +83,13 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   { module: 'SYSTEM', code: 'LIST_AUDIT_LOGS', description: 'View the audit log of who changed what' },
   { module: 'ASSESSMENT', code: 'ENTER_SCORES', description: "Enter and correct scores for the subjects and classes one teaches" },
   { module: 'ASSESSMENT', code: 'ENTER_ANY_SCORES', description: 'Enter and correct scores for any subject and class, without a teaching assignment' },
+  { module: 'ATTENDANCE', code: 'MARK_ATTENDANCE', description: 'Take attendance for one\'s own classes (daily as homeroom teacher, or one\'s assigned subjects)' },
+  { module: 'ATTENDANCE', code: 'MARK_ANY_ATTENDANCE', description: 'Take or correct attendance for any class and subject' },
+  { module: 'ATTENDANCE', code: 'VIEW_ATTENDANCE', description: 'View attendance of one\'s own classes' },
+  { module: 'ATTENDANCE', code: 'VIEW_ANY_ATTENDANCE', description: 'View attendance of any class or student' },
+  { module: 'ATTENDANCE', code: 'LIST_LEAVE_REQUESTS', description: 'View students\' leave requests' },
+  { module: 'ATTENDANCE', code: 'CREATE_LEAVE_REQUEST', description: 'Record a student\'s leave request (pending until reviewed)' },
+  { module: 'ATTENDANCE', code: 'REVIEW_LEAVE_REQUEST', description: 'Approve, reject or cancel leave requests' },
 ];
 
 export const ALL_PERMISSION_CODES: PermissionCode[] = PERMISSION_DEFINITIONS.map((p) => p.code);
