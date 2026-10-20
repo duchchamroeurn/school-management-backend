@@ -6,6 +6,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
+    "jwt:secret": "tsx src/utils/generate-jwt-secret.ts",
     "db:push": "npx prisma db push",
     "db:studio": "npx prisma studio",
     "db:seed": "npx prisma db seed",

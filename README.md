@@ -51,8 +51,10 @@ Copy the example file, then set a real `JWT_SECRET` and your frontend's address 
 
 ```sh
 cp .env.example .env
-openssl rand -base64 48   # paste the output into JWT_SECRET
+npm run jwt:secret        # writes a random JWT_SECRET into .env
 ```
+
+`npm run jwt:secret` refuses to replace a secret that's already set, because that logs everyone out. Add `-- --force` to replace it anyway, or `-- --print` to only print a new secret.
 
 [.env.example](.env.example) documents every setting. The API checks them at startup and exits with a list of problems if a required value is missing or invalid. It also exits if it can't connect to `DATABASE_URL`.
 

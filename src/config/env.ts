@@ -45,17 +45,17 @@ if (databaseUrl) {
 
 // ── Authentication ────────────────────────────────────────
 const JWT_SECRET_MIN_LENGTH = 32;
-// Example values from docs that must never be used for real
+// Example values from docs that must never be used for real (also listed in utils/generate-jwt-secret.ts)
 const PLACEHOLDER_SECRETS = ['change-me-to-a-long-random-string', 'replace-with-output-of-openssl-rand-base64-48'];
 
 const jwtSecret = required('JWT_SECRET');
 if (jwtSecret) {
   if (PLACEHOLDER_SECRETS.includes(jwtSecret)) {
-    problems.push('JWT_SECRET is still the example value; generate one with: openssl rand -base64 48');
+    problems.push('JWT_SECRET is still the example value; run: npm run jwt:secret');
   } else if (jwtSecret.length < JWT_SECRET_MIN_LENGTH) {
-    problems.push(`JWT_SECRET must be at least ${JWT_SECRET_MIN_LENGTH} characters; generate one with: openssl rand -base64 48`);
+    problems.push(`JWT_SECRET must be at least ${JWT_SECRET_MIN_LENGTH} characters; run: npm run jwt:secret`);
   } else if (new Set(jwtSecret).size < 10) {
-    problems.push('JWT_SECRET is too repetitive to be secure; generate one with: openssl rand -base64 48');
+    problems.push('JWT_SECRET is too repetitive to be secure; run: npm run jwt:secret');
   }
 }
 
