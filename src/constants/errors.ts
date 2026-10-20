@@ -220,6 +220,38 @@ const ERROR_DEFS = {
   LAST_SYSTEM_ADMIN: def(409, (action: string, username: string) => `Cannot ${action}: ${username} is the last active System Admin`),
   CANNOT_MODIFY_SELF: def(400, (action: string) => `You cannot ${action} your own account`),
 
+  // ── Assessment (grading rules) ──────────────────────────
+  SUBJECT_ASSESSMENT_CONFIG_NOT_FOUND: def(404, 'Subject assessment config not found'),
+  MAX_TOTAL_SCORE_INVALID: def(400, 'maxTotalScore must be greater than 0', { code: 'VALIDATION_ERROR', details: fieldDetails('maxTotalScore') }),
+  COMPONENT_MAX_SCORE_INVALID: def(400, (name: string) => `Component "${name}" must have a maxScore greater than 0`, {
+    code: 'VALIDATION_ERROR',
+    details: (name: string) => ({ field: 'components.maxScore', component: name }),
+  }),
+  DUPLICATE_COMPONENT_NAME: def(400, (name: string) => `Component name "${name}" is used more than once`, {
+    code: 'VALIDATION_ERROR',
+    details: (name: string) => ({ field: 'components.name', component: name }),
+  }),
+  COMPONENTS_REQUIRED: def(400, 'A component-based subject needs at least one component', {
+    code: 'VALIDATION_ERROR',
+    details: fieldDetails('components'),
+  }),
+  COMPONENTS_NOT_ALLOWED: def(400, 'This subject is not component-based, so it cannot have components; set isComponentBased to true', {
+    code: 'VALIDATION_ERROR',
+    details: fieldDetails('components'),
+  }),
+  COMPONENT_TOTAL_MISMATCH: def(
+    400,
+    (maxTotalScore: number, componentTotal: number) =>
+      `The components' maxScore values add up to ${componentTotal}, but maxTotalScore is ${maxTotalScore}; they must be equal`,
+    {
+      details: (maxTotalScore: number, componentTotal: number) => ({
+        maxTotalScore,
+        componentTotal,
+        difference: Math.round((maxTotalScore - componentTotal) * 100) / 100,
+      }),
+    },
+  ),
+
   // ── Self-service (/me) ──────────────────────────────────
   OWN_PROFILE_NOT_FOUND: def(404, 'Your login is not linked to a student or staff profile', { code: 'PROFILE_NOT_FOUND' }),
   OWN_STAFF_PROFILE_NOT_FOUND: def(404, 'Only staff logins have a homeroom class: your login is not linked to a staff profile', {

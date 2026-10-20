@@ -56,6 +56,16 @@ enum EnrollmentType {
   REPEATING
 }
 
+// MoEYS mention (និទ្ទេស) for a period's result
+enum Mention {
+  A // ល្អប្រសើរ (Excellent)
+  B // ល្អណាស់ (Very good)
+  C // ល្អ (Good)
+  D // ល្អបង្គួរ (Fairly good)
+  E // មធ្យម (Average)
+  F // ខ្សោយ (Weak / fail)
+}
+
 enum AcademicYearStatus {
   UPCOMING
   ACTIVE
@@ -221,8 +231,9 @@ model AcademicYear {
   status    AcademicYearStatus @default(UPCOMING)
 
   // Relations
-  classes     ClassSection[]
-  enrollments YearlyEnrollment[]
+  classes           ClassSection[]
+  enrollments       YearlyEnrollment[]
+  assessmentPeriods AssessmentPeriod[]
 
   @@map("academic_years")
 }
@@ -247,7 +258,9 @@ model Subject {
   isCoreSubject Boolean @default(true) @map("is_core_subject") // True = failing this means failing the year
 
   // Relations
-  gradeSubjects GradeSubject[]
+  gradeSubjects     GradeSubject[]
+  // Scoring rules live per assessment period, not on the subject (see SubjectAssessmentConfig)
+  assessmentConfigs SubjectAssessmentConfig[]
 
   @@map("subjects")
 }
@@ -306,6 +319,11 @@ model YearlyEnrollment {
   classSection ClassSection   @relation(fields: [classSectionId], references: [id])
   academicYear AcademicYear   @relation(fields: [academicYearId], references: [id])
 
+  // Scores belong to the enrollment (student + class + year), so rankings use the class the student was in
+  componentScores      ComponentScore[]
+  monthlySubjectScores MonthlySubjectScore[]
+  monthlyResults       MonthlyResult[]
+
   // A student can only be enrolled in one class per academic year
   @@unique([studentId, academicYearId])
   @@index([classSectionId])
@@ -313,7 +331,143 @@ model YearlyEnrollment {
 }
 
 // ==========================================
-// 6. AUDIT LOG (append-only: the API never updates or deletes rows)
+// 6. ASSESSMENT & GRADING (MoEYS)
+// ==========================================
+//
+// Scoring rules change per period: Math in January may be out of 50 with no components, while
+// Math in February is out of 100 split into components. So the rules hang off
+// SubjectAssessmentConfig (subject × period), never off Subject.
+//
+//   AssessmentPeriod ─┬─ SubjectAssessmentConfig ── SubjectComponent ── ComponentScore
+//                     │          └──────────────── MonthlySubjectScore
+//                     └─ MonthlyResult
+//
+// Scores reference the YearlyEnrollment. Deleting a period, config or component that already has
+// scores is refused (Restrict), so recorded scores are never removed by a cascade.
+
+// A month ("January") or exam period ("Semester 1") within an academic year
+model AssessmentPeriod {
+  id             String  @id @default(uuid())
+  name           String // e.g. "January", "Semester 1"
+  academicYearId String  @map("academic_year_id")
+  // Locked = results are final: scores and configs for this period may no longer change
+  isLocked       Boolean @default(false) @map("is_locked")
+
+  // Relations
+  academicYear   AcademicYear              @relation(fields: [academicYearId], references: [id])
+  subjectConfigs SubjectAssessmentConfig[]
+  results        MonthlyResult[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([academicYearId, name])
+  @@map("assessment_periods")
+}
+
+// How one subject is scored in one period. Validate with assertConfigComponentsValid (src/utils/assessment.ts):
+// when isComponentBased, the components' maxScore values must add up to exactly maxTotalScore.
+model SubjectAssessmentConfig {
+  id                 String  @id @default(uuid())
+  subjectId          String  @map("subject_id")
+  assessmentPeriodId String  @map("assessment_period_id")
+  maxTotalScore      Float   @map("max_total_score") // e.g. 50 or 100
+  // true = the total is the sum of SubjectComponent scores; false = one score is entered directly
+  isComponentBased   Boolean @default(false) @map("is_component_based")
+
+  // Relations
+  subject          Subject               @relation(fields: [subjectId], references: [id])
+  assessmentPeriod AssessmentPeriod      @relation(fields: [assessmentPeriodId], references: [id], onDelete: Cascade)
+  components       SubjectComponent[]
+  subjectScores    MonthlySubjectScore[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([subjectId, assessmentPeriodId])
+  @@index([assessmentPeriodId])
+  @@map("subject_assessment_configs")
+}
+
+// A scored part of a subject in one period, e.g. "Homework" / 20, "Exam" / 80
+model SubjectComponent {
+  id                        String @id @default(uuid())
+  subjectAssessmentConfigId String @map("subject_assessment_config_id")
+  name                      String // e.g. "Homework", "Oral", "Exam"
+  maxScore                  Float  @map("max_score")
+
+  // Relations
+  subjectAssessmentConfig SubjectAssessmentConfig @relation(fields: [subjectAssessmentConfigId], references: [id], onDelete: Cascade)
+  scores                  ComponentScore[]
+
+  @@unique([subjectAssessmentConfigId, name])
+  @@map("subject_components")
+}
+
+// One student's score for one component (only for component-based configs)
+model ComponentScore {
+  id                 String @id @default(uuid())
+  enrollmentId       String @map("enrollment_id")
+  subjectComponentId String @map("subject_component_id")
+  score              Float // 0 … SubjectComponent.maxScore
+
+  // Relations
+  enrollment       YearlyEnrollment @relation(fields: [enrollmentId], references: [id])
+  subjectComponent SubjectComponent @relation(fields: [subjectComponentId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([enrollmentId, subjectComponentId])
+  @@index([subjectComponentId])
+  @@map("component_scores")
+}
+
+// One student's total for one subject in one period: the sum of its ComponentScores, or the score
+// entered directly when the config is not component-based
+model MonthlySubjectScore {
+  id                        String @id @default(uuid())
+  enrollmentId              String @map("enrollment_id")
+  subjectAssessmentConfigId String @map("subject_assessment_config_id")
+  score                     Float // 0 … SubjectAssessmentConfig.maxTotalScore
+
+  // Relations
+  enrollment              YearlyEnrollment        @relation(fields: [enrollmentId], references: [id])
+  subjectAssessmentConfig SubjectAssessmentConfig @relation(fields: [subjectAssessmentConfigId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([enrollmentId, subjectAssessmentConfigId])
+  @@index([subjectAssessmentConfigId])
+  @@map("monthly_subject_scores")
+}
+
+// A student's calculated result for one period, with their rank in their class
+model MonthlyResult {
+  id                 String  @id @default(uuid())
+  enrollmentId       String  @map("enrollment_id")
+  assessmentPeriodId String  @map("assessment_period_id")
+  totalScore         Float   @map("total_score")
+  average            Float
+  mention            Mention
+  classRank          Int     @map("class_rank") // 1 = top of the class; equal averages share a rank
+  remarks            String? // teacher's comment (មតិយោបល់)
+
+  // Relations
+  enrollment       YearlyEnrollment @relation(fields: [enrollmentId], references: [id])
+  assessmentPeriod AssessmentPeriod @relation(fields: [assessmentPeriodId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([enrollmentId, assessmentPeriodId])
+  @@index([assessmentPeriodId])
+  @@map("monthly_results")
+}
+
+// ==========================================
+// 7. AUDIT LOG (append-only: the API never updates or deletes rows)
 // ==========================================
 
 // Who changed what, and when. Deliberately has no foreign keys: actor and entity are copied
