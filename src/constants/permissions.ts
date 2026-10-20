@@ -41,14 +41,14 @@ export const PERMISSIONS = {
   ...(Object.fromEntries(Object.keys(RESOURCES).map((r) => [r, codesFor(r as Resource)])) as {
     [R in Resource]: ResourceCodes<R>;
   }),
-  SELF_SERVICE: { VIEW_OWN_PROFILE: 'VIEW_OWN_PROFILE' },
+  SELF_SERVICE: { VIEW_OWN_PROFILE: 'VIEW_OWN_PROFILE', VIEW_OWN_HOMEROOM: 'VIEW_OWN_HOMEROOM' },
   // Single-row configuration: anyone signed in may read it, only this permission may change it
   SCHOOL_SETTINGS: { UPDATE: 'UPDATE_SCHOOL_SETTINGS' },
 } as const;
 
 export type PermissionCode =
   | { [R in Resource]: ResourceCodes<R>[Action] }[Resource]
-  | typeof PERMISSIONS.SELF_SERVICE.VIEW_OWN_PROFILE
+  | (typeof PERMISSIONS.SELF_SERVICE)[keyof typeof PERMISSIONS.SELF_SERVICE]
   | typeof PERMISSIONS.SCHOOL_SETTINGS.UPDATE;
 
 export interface PermissionDefinition {
@@ -66,6 +66,7 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     })),
   ),
   { module: 'SELF_SERVICE', code: 'VIEW_OWN_PROFILE', description: 'View own profile and enrollment' },
+  { module: 'SELF_SERVICE', code: 'VIEW_OWN_HOMEROOM', description: 'View the roster of the class one is homeroom teacher of' },
   { module: 'SYSTEM', code: 'UPDATE_SCHOOL_SETTINGS', description: 'Change school name, MoEYS code and school level (grades offered)' },
 ];
 

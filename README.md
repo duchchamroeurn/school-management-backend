@@ -166,6 +166,7 @@ If you changed `POSTGRES_USER` or `POSTGRES_DB`, use those values for `-U` and `
 | `npm start` | Run the compiled API |
 | `npm run db:push` | Sync `prisma/schema.prisma` to the database |
 | `npm run db:studio` | Open Prisma Studio |
+| `npm run jwt:secret` | Write a random `JWT_SECRET` into `.env` |
 | `npm run db:seed` | Seed reference data and the root admin |
 | `npm run db:seed:students` | Import students from `data/students.json` |
 | `npm run db:seed:staff` | Import staff from `data/staff.json` |
@@ -196,6 +197,7 @@ All routes are prefixed with `/api/v1`. Except for `/health` and `/auth/login`, 
 | --- | --- |
 | Health | `GET /health` |
 | Auth | `POST /auth/login`, `POST /auth/change-password`, `GET /auth/me` |
+| Me (own data) | `GET /me/profile`, `GET /me/homeroom?academicYear=` |
 | Users | `GET /users`, `GET /users/:id`, `POST /users`, `PUT /users/:id/roles`, `PATCH /users/:id/status`, `POST /users/:id/reset-password`, `DELETE /users/:id` |
 | Roles | `GET /roles`, `GET /roles/:id` |
 | Staff | CRUD on `/staff`, plus `POST /staff/assign-homeroom` |
@@ -207,6 +209,18 @@ All routes are prefixed with `/api/v1`. Except for `/health` and `/auth/login`, 
 | Enrollments | CRUD on `/enrollments` |
 
 "CRUD" means `GET /`, `GET /:id`, `POST /`, `PATCH /:id` and `DELETE /:id`.
+
+### Own data (`/me`)
+
+These endpoints always use the signed-in login's own profile, never an id from the request, so a user can only see their own records.
+
+- `GET /me/profile` (`VIEW_OWN_PROFILE`): returns `{ profileType, profile }`.
+  - For a student login, this is their student record with enrollment history, including each year's class and homeroom teacher.
+  - For a staff login, it's their staff record with homeroom history.
+  - Returns `404 PROFILE_NOT_FOUND` if the login has no profile.
+- `GET /me/homeroom` (`VIEW_OWN_HOMEROOM`): the roster of the class the signed-in teacher is homeroom teacher of, in the same format as `GET /class-sections/:id/roster`.
+  - Defaults to the ACTIVE academic year. Pass `?academicYear=2025-2026` for another year.
+  - Returns `404 NO_HOMEROOM_CLASS` if they have no homeroom class that year.
 
 ### Default roles
 

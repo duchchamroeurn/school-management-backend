@@ -24,6 +24,7 @@ const SYSTEM_ADMIN_ROLE = 'System Admin';
 
 const { USER, ROLE, STUDENT } = PERMISSIONS;
 const OWN_PROFILE = PERMISSIONS.SELF_SERVICE.VIEW_OWN_PROFILE;
+const OWN_HOMEROOM = PERMISSIONS.SELF_SERVICE.VIEW_OWN_HOMEROOM;
 const ACADEMIC_REFERENCE = ['SUBJECT', 'GRADE', 'ACADEMIC_YEAR', 'CLASS_SECTION'] as const;
 
 // isSystemDefault = true: the API must block renaming/deleting these and editing their permissions.
@@ -58,7 +59,7 @@ const ROLES: { latinName: string; khmerName: string; permissions: PermissionCode
   {
     latinName: 'Teacher',
     khmerName: 'គ្រូបង្រៀន',
-    permissions: [...readOnly('STUDENT', 'ENROLLMENT', ...ACADEMIC_REFERENCE), OWN_PROFILE],
+    permissions: [...readOnly('STUDENT', 'ENROLLMENT', ...ACADEMIC_REFERENCE), OWN_PROFILE, OWN_HOMEROOM],
   },
   { latinName: 'Student', khmerName: 'សិស្ស', permissions: [OWN_PROFILE] },
 ];

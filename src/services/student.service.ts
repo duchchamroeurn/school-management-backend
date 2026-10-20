@@ -111,7 +111,14 @@ export async function getStudent(id: string) {
       enrollments: {
         include: {
           academicYear: { select: { id: true, name: true, status: true } },
-          classSection: { select: { id: true, sectionName: true, grade: { select: { id: true, gradeNumber: true } } } },
+          classSection: {
+            select: {
+              id: true,
+              sectionName: true,
+              grade: { select: { id: true, gradeNumber: true } },
+              homeroomTeacher: { select: { id: true, khmerName: true, latinName: true } },
+            },
+          },
         },
         orderBy: { academicYear: { startDate: 'desc' } },
       },

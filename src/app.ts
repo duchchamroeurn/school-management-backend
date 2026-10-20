@@ -7,6 +7,7 @@ import authRoutes from './routes/auth.routes';
 import classSectionRoutes from './routes/class-section.routes';
 import enrollmentRoutes from './routes/enrollment.routes';
 import gradeRoutes from './routes/grade.routes';
+import meRoutes from './routes/me.routes';
 import schoolSettingsRoutes from './routes/school-settings.routes';
 import staffRoutes from './routes/staff.routes';
 import studentRoutes from './routes/student.routes';
@@ -30,6 +31,7 @@ app.get('/api/v1/health', (req: Request, res: Response) => {
 });
 
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/me', meRoutes);
 app.use('/api/v1/school-settings', schoolSettingsRoutes);
 app.use('/api/v1/grades', gradeRoutes);
 app.use('/api/v1/subjects', subjectRoutes);

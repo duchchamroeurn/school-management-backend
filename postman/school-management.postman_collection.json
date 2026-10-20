@@ -184,6 +184,80 @@
       ]
     },
     {
+      "name": "Me (own data)",
+      "description": "Self-service views for the signed-in login. Log in as demo.student or demo.teacher to try them.",
+      "item": [
+        {
+          "name": "My profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/me/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "profile"
+              ]
+            },
+            "description": "Own student record with enrollment history (class and homeroom teacher per year), or own staff record with homeroom history. Needs `VIEW_OWN_PROFILE`. 404 PROFILE_NOT_FOUND if the login has no profile."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('has profileType', () => pm.expect(pm.response.json().data.profileType).to.be.oneOf(['STUDENT', 'STAFF']));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "My homeroom class",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/me/homeroom",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "homeroom"
+              ],
+              "query": [
+                {
+                  "key": "academicYear",
+                  "value": "",
+                  "disabled": true,
+                  "description": "e.g. 2025-2026; defaults to the ACTIVE year"
+                }
+              ]
+            },
+            "description": "Roster of the class the signed-in teacher is homeroom teacher of (same shape as Class roster). Defaults to the ACTIVE academic year. Needs `VIEW_OWN_HOMEROOM`. 404 NO_HOMEROOM_CLASS if none that year."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('has summary', () => pm.expect(pm.response.json().data.summary).to.have.property('seatsLeft'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "School Settings",
       "description": "One school per installation. Anyone signed in can read the settings; changing them needs `UPDATE_SCHOOL_SETTINGS` (System Admin only). The level decides which grades exist: LOWER_SECONDARY (7–9), UPPER_SECONDARY (10–12), COMBINED (7–12).",
       "item": [

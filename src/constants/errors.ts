@@ -218,6 +218,13 @@ const ERROR_DEFS = {
   LAST_SYSTEM_ADMIN: def(409, (action: string, username: string) => `Cannot ${action}: ${username} is the last active System Admin`),
   CANNOT_MODIFY_SELF: def(400, (action: string) => `You cannot ${action} your own account`),
 
+  // ── Self-service (/me) ──────────────────────────────────
+  OWN_PROFILE_NOT_FOUND: def(404, 'Your login is not linked to a student or staff profile', { code: 'PROFILE_NOT_FOUND' }),
+  OWN_STAFF_PROFILE_NOT_FOUND: def(404, 'Only staff logins have a homeroom class: your login is not linked to a staff profile', {
+    code: 'PROFILE_NOT_FOUND',
+  }),
+  NO_HOMEROOM_CLASS: def(404, (yearName: string) => `You are not the homeroom teacher of any class in academic year ${yearName}`),
+
   // ── Roles & permissions ─────────────────────────────────
   ROLE_NOT_FOUND: def(404, 'Role not found'),
   ROLES_NOT_FOUND: def(404, 'One or more roles do not exist', { code: 'ROLE_NOT_FOUND', details: (missing: string[]) => ({ missing }) }),
