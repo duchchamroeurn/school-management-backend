@@ -165,11 +165,43 @@ docker compose start api
 
 If you changed `POSTGRES_USER` or `POSTGRES_DB`, use those values for `-U` and `-d`.
 
+## Testing
+
+```sh
+npm test            # run the test suite once
+npm run test:watch  # re-run on every change
+npm run typecheck   # type-check the code and the tests
+```
+
+The tests ([`tests/`](tests)) call the real API with Supertest against a separate database, `school_management_test`, on the same PostgreSQL server. So the Docker `db` service, or your local PostgreSQL, must be running.
+
+Each run starts clean:
+1. The test database is created if it doesn't exist.
+2. The schema is pushed to it.
+3. Every table is emptied, and the real seed runs.
+4. Three academic years are added: 2025-2026 completed, 2026-2027 active and 2027-2028 upcoming.
+
+The suite refuses to run against any database whose name doesn't end in `_test`, so it can never touch your development data. To use another server, set `TEST_DATABASE_URL`.
+
+What the tests cover:
+- **Login protection:** lockout, and that unknown usernames behave the same.
+- **Password change:** it revokes older tokens.
+- **Score entry:** the teacher's subject and class scope, component rules, the deadline, and locked periods.
+- **Grading rules:** they freeze once scored.
+- **Results:** ranking with ties, the A–F scale, missing scores, and remarks surviving recalculation.
+- **Promotion:** all-or-nothing, dry run, repeating and excluded students, top-grade graduation.
+- **Audit log:** who, what and when, changed fields only, no passwords or hashes.
+- **Guardians:** one primary contact, shared between siblings.
+
+Each test builds its own uniquely named data with the helpers in [`tests/helpers.ts`](tests/helpers.ts), so tests don't depend on each other.
+
 ## Scripts
 
 | Script | Description |
 | --- | --- |
 | `npm run dev` | Start the API with watch mode (`tsx`) |
+| `npm test` | Run the test suite (needs PostgreSQL running) |
+| `npm run typecheck` | Type-check the code and the tests |
 | `npm run build` | Compile TypeScript to `dist/` |
 | `npm start` | Run the compiled API |
 | `npm run db:push` | Sync `prisma/schema.prisma` to the database |

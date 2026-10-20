@@ -17,7 +17,10 @@
     "demo:install": "tsx src/utils/demo-install.ts",
     "demo:install:lower": "tsx src/utils/demo-install.ts --level lower",
     "demo:install:upper": "tsx src/utils/demo-install.ts --level upper",
-    "demo:install:combined": "tsx src/utils/demo-install.ts --level combined"
+    "demo:install:combined": "tsx src/utils/demo-install.ts --level combined",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json"
   },
   "keywords": [],
   "author": "",
@@ -43,9 +46,12 @@
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.6.5",
+    "@types/supertest": "7.2.1",
     "prisma": "^7.10.1",
+    "supertest": "7.3.1",
     "tsx": "^4.23.15",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "4.1.11"
   },
   "overrides": {
     "uuid": "11.1.1"

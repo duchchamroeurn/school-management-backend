@@ -1,0 +1,7 @@
+{
+  // Type-checks the tests together with the code they import (vitest itself only strips types)
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "rootDir": ".", "noEmit": true },
+  "include": ["src/**/*", "tests/**/*"],
+  "exclude": ["node_modules"]
+}
