@@ -39,6 +39,7 @@ services:
       PORT: 3000
       DATABASE_URL: postgresql://${POSTGRES_USER:-school}:${POSTGRES_PASSWORD:-school}@db:5432/${POSTGRES_DB:-school_management}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS must be set in .env}
     ports:
       - "${API_PORT:-3000}:3000"
     depends_on:

@@ -52,12 +52,14 @@ Create a `.env` file in the project root:
 ```env
 DATABASE_URL=postgresql://school:school@localhost:5432/school_management
 JWT_SECRET=change-me-to-a-long-random-string
+CORS_ORIGINS=http://localhost:5173
 ```
 
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
 | `DATABASE_URL` | Yes | | PostgreSQL connection string |
 | `JWT_SECRET` | Yes | | Secret used to sign access tokens |
+| `CORS_ORIGINS` | Yes | | Comma-separated frontend origins allowed to call the API from a browser, e.g. `https://school.example.com,http://localhost:5173` |
 | `JWT_EXPIRES_IN` | No | `8h` | Access token lifetime |
 | `PORT` | No | `3000` | API port |
 | `LOGIN_MAX_FAILURES` | No | `5` | Failed logins in a row before a username is locked |
@@ -105,6 +107,7 @@ Failed logins are throttled. After `LOGIN_MAX_FAILURES` wrong passwords in a row
 
 ```sh
 echo "JWT_SECRET=change-me-to-a-long-random-string" > .env
+echo "CORS_ORIGINS=http://localhost:5173" >> .env
 docker compose up --build
 ```
 

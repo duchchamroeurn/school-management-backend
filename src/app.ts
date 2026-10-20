@@ -19,9 +19,19 @@ dotenv.config();
 
 const app: Application = express();
 
+// Browser origins allowed to call the API, e.g. CORS_ORIGINS=https://school.example.com,http://localhost:5173.
+// Other websites get no CORS headers, so browsers block them. Non-browser clients (Postman, curl) are unaffected.
+const corsOrigins = (process.env.CORS_ORIGINS ?? '')
+  .split(',')
+  .map((origin) => origin.trim().replace(/\/+$/, '')) // browsers send origins without a trailing slash
+  .filter(Boolean);
+if (corsOrigins.length === 0) {
+  throw new Error('CORS_ORIGINS is not set: list the frontend address(es) allowed to call the API');
+}
+
 // Global Middlewares
 app.use(helmet());
-app.use(cors());
+app.use(cors({ origin: corsOrigins }));
 app.use(express.json());
 
 // Health Check Route
