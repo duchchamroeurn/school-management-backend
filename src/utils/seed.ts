@@ -1,6 +1,7 @@
-// Seeds base reference data: system permissions, immutable system roles, grades 7–12,
-// MoEYS subjects, and the root System Admin login.
-// Every write is an upsert, so this is safe to run repeatedly (`npm run db:seed`).
+// Seeds base reference data: system permissions, immutable system roles, school settings, the grades
+// for the school level (SCHOOL_LEVEL on first install), MoEYS subjects, and the root System Admin login.
+// Every write is an upsert/create-if-missing, so this is safe to run repeatedly (`npm run db:seed`).
+import { DEFAULT_SUBJECTS } from '../constants/curriculum';
 import {
   ALL_PERMISSION_CODES,
   fullAccess,
@@ -9,8 +10,9 @@ import {
   PERMISSIONS,
   readOnly,
 } from '../constants/permissions';
-import { EducationLevel } from '../generated/prisma/client';
+import { gradesFor, LEVEL_LABEL } from '../constants/school-levels';
 import { prisma } from '../lib/prisma';
+import { addMissingGrades, ensureSchoolSettings } from '../services/school-settings.service';
 import { hashPassword } from './password';
 
 // ==========================================
@@ -29,11 +31,14 @@ const ACADEMIC_REFERENCE = ['SUBJECT', 'GRADE', 'ACADEMIC_YEAR', 'CLASS_SECTION'
 const ROLES: { latinName: string; khmerName: string; permissions: PermissionCode[] }[] = [
   { latinName: SYSTEM_ADMIN_ROLE, khmerName: 'អ្នកគ្រប់គ្រងប្រព័ន្ធ', permissions: ALL_PERMISSION_CODES },
   {
-    // Everything except managing logins and roles (may still look them up)
+    // Everything except managing logins, roles and system configuration (may still look them up)
     latinName: 'Principal',
     khmerName: 'នាយកសាលា',
     permissions: ALL_PERMISSION_CODES.filter(
-      (c) => !([USER.CREATE, USER.UPDATE, USER.DELETE, ROLE.CREATE, ROLE.UPDATE, ROLE.DELETE] as PermissionCode[]).includes(c),
+      (c) =>
+        !(
+          [USER.CREATE, USER.UPDATE, USER.DELETE, ROLE.CREATE, ROLE.UPDATE, ROLE.DELETE, PERMISSIONS.SCHOOL_SETTINGS.UPDATE] as PermissionCode[]
+        ).includes(c),
     ),
   },
   {
@@ -59,32 +64,8 @@ const ROLES: { latinName: string; khmerName: string; permissions: PermissionCode
 ];
 
 // ==========================================
-// 3. GRADES & SUBJECTS (MoEYS secondary curriculum)
+// 3. GRADES & SUBJECTS — see src/constants/curriculum.ts and school-levels.ts
 // ==========================================
-
-const GRADES = [7, 8, 9, 10, 11, 12].map((gradeNumber) => ({
-  gradeNumber,
-  level: gradeNumber <= 9 ? EducationLevel.LOWER_SECONDARY : EducationLevel.UPPER_SECONDARY,
-}));
-
-const LOWER = [7, 8, 9];
-const ALL = [7, 8, 9, 10, 11, 12];
-
-const SUBJECTS = [
-  { code: 'KHMER', khmerName: 'អក្សរសាស្ត្រខ្មែរ', latinName: 'Khmer Literature', isCoreSubject: true, grades: ALL },
-  { code: 'MATH', khmerName: 'គណិតវិទ្យា', latinName: 'Mathematics', isCoreSubject: true, grades: ALL },
-  { code: 'PHYSICS', khmerName: 'រូបវិទ្យា', latinName: 'Physics', isCoreSubject: true, grades: ALL },
-  { code: 'CHEMISTRY', khmerName: 'គីមីវិទ្យា', latinName: 'Chemistry', isCoreSubject: true, grades: ALL },
-  { code: 'BIOLOGY', khmerName: 'ជីវវិទ្យា', latinName: 'Biology', isCoreSubject: true, grades: ALL },
-  { code: 'EARTH_SCIENCE', khmerName: 'ផែនដីវិទ្យា', latinName: 'Earth Science', isCoreSubject: true, grades: ALL },
-  { code: 'HISTORY', khmerName: 'ប្រវត្តិវិទ្យា', latinName: 'History', isCoreSubject: true, grades: ALL },
-  { code: 'GEOGRAPHY', khmerName: 'ភូមិវិទ្យា', latinName: 'Geography', isCoreSubject: true, grades: ALL },
-  { code: 'MORALITY_CIVICS', khmerName: 'សីលធម៌-ពលរដ្ឋវិជ្ជា', latinName: 'Morality-Civics', isCoreSubject: true, grades: ALL },
-  { code: 'ENGLISH', khmerName: 'ភាសាអង់គ្លេស', latinName: 'English', isCoreSubject: true, grades: ALL },
-  { code: 'HOME_ECONOMICS', khmerName: 'គេហវិទ្យា', latinName: 'Home Economics', isCoreSubject: false, grades: LOWER },
-  { code: 'PE', khmerName: 'អប់រំកាយ និងកីឡា', latinName: 'Physical Education & Sport', isCoreSubject: false, grades: ALL },
-  { code: 'ICT', khmerName: 'បច្ចេកវិទ្យាព័ត៌មាន', latinName: 'ICT', isCoreSubject: false, grades: ALL },
-];
 
 // ==========================================
 // 4. ROOT ADMIN
@@ -134,24 +115,27 @@ async function seedRoles() {
 }
 
 async function seedGradesAndSubjects() {
-  for (const g of GRADES) {
-    await prisma.grade.upsert({ where: { gradeNumber: g.gradeNumber }, update: { level: g.level }, create: g });
-  }
-  const gradeIds = new Map(
-    (await prisma.grade.findMany({ select: { id: true, gradeNumber: true } })).map((g) => [g.gradeNumber, g.id]),
-  );
+  // School level: from SCHOOL_LEVEL on first install, afterwards from the database (change it via the API)
+  const { level } = await ensureSchoolSettings();
+  const addedGrades = await addMissingGrades(prisma, level);
 
   // Subjects are seeded once: after that they (and their grade assignments) are managed via the
   // Subjects API, so existing subjects are never overwritten and unassigned grades are not re-added.
+  const gradeIds = new Map(
+    (await prisma.grade.findMany({ select: { id: true, gradeNumber: true } })).map((g) => [g.gradeNumber, g.id]),
+  );
   let created = 0;
-  for (const { grades, ...s } of SUBJECTS) {
+  for (const { grades, ...s } of DEFAULT_SUBJECTS) {
     if (await prisma.subject.findUnique({ where: { code: s.code } })) continue;
     await prisma.subject.create({
-      data: { ...s, gradeSubjects: { create: grades.map((n) => ({ gradeId: gradeIds.get(n)! })) } },
+      data: { ...s, gradeSubjects: { create: grades.filter((n) => gradeIds.has(n)).map((n) => ({ gradeId: gradeIds.get(n)! })) } },
     });
     created++;
   }
-  console.log(`  ✓ ${GRADES.length} grades, ${SUBJECTS.length} default subjects (${created} newly created)`);
+  console.log(`  ✓ school level: ${LEVEL_LABEL[level]}`);
+  console.log(
+    `  ✓ grades ${gradesFor(level).join(', ')}${addedGrades.length ? ` (${addedGrades.length} newly created)` : ''}, ${DEFAULT_SUBJECTS.length} default subjects (${created} newly created)`,
+  );
 }
 
 async function seedRootAdmin() {
