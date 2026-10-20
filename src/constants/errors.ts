@@ -111,7 +111,7 @@ const ERROR_DEFS = {
   ),
   ACADEMIC_YEAR_CLOSED: def(
     409,
-    (name: string, what: 'its classes' | 'its enrollments' | 'homeroom teachers') =>
+    (name: string, what: 'its classes' | 'its enrollments' | 'homeroom teachers' | 'its scores' | 'its teaching assignments') =>
       `Academic year ${name} is completed; ${what} can no longer be changed`,
   ),
   CLASS_IN_OTHER_YEAR: def(
@@ -153,6 +153,15 @@ const ERROR_DEFS = {
     (teacher: { latinName: string; khmerName: string }, className: string, yearName: string, _classSectionId: string) =>
       `${teacher.latinName} (${teacher.khmerName}) is already homeroom teacher of class ${className} in ${yearName}`,
     { details: (_t: unknown, _c: string, _y: string, classSectionId: string) => ({ classSectionId }) },
+  ),
+
+  // ── Teaching assignments ────────────────────────────────
+  TEACHING_ASSIGNMENT_NOT_FOUND: def(404, 'Teaching assignment not found'),
+  SUBJECT_ALREADY_TAUGHT: def(
+    409,
+    (subjectName: string, className: string, teacher: { latinName: string; khmerName: string }, _assignmentId: string) =>
+      `${subjectName} in class ${className} is already taught by ${teacher.latinName} (${teacher.khmerName}); change that assignment instead`,
+    { details: (_s: string, _c: string, _t: unknown, assignmentId: string) => ({ assignmentId }) },
   ),
 
   // ── Students ────────────────────────────────────────────
@@ -201,6 +210,7 @@ const ERROR_DEFS = {
   HIRE_DATE_IN_FUTURE: def(400, 'hireDate cannot be in the future', { code: 'VALIDATION_ERROR', details: fieldDetails('hireDate') }),
   STAFF_HAS_HOMEROOM: def(409, (name: string, classes: number) => `${name} is homeroom teacher of ${classes} class(es); unassign them first`),
   STAFF_HAS_LOGIN: def(409, (name: string) => `${name} has a login account; remove it first`),
+  STAFF_HAS_TEACHING: def(409, (name: string, assignments: number) => `${name} has ${assignments} teaching assignment(s); remove them first`),
 
   // ── Users (logins) ──────────────────────────────────────
   USER_NOT_FOUND: def(404, 'User not found'),
@@ -252,9 +262,59 @@ const ERROR_DEFS = {
     },
   ),
 
+  // ── Score entry ─────────────────────────────────────────
+  ASSESSMENT_PERIOD_NOT_FOUND: def(404, 'Assessment period not found'),
+  NO_ASSESSMENT_CONFIG: def(
+    404,
+    (subjectName: string, periodName: string) => `${subjectName} has no scoring rules for ${periodName}; set them up before entering scores`,
+    { code: 'SUBJECT_ASSESSMENT_CONFIG_NOT_FOUND' },
+  ),
+  PERIOD_LOCKED: def(409, (periodName: string, yearName: string) => `${periodName} ${yearName} is locked; its scores can no longer change`),
+  STUDENT_NOT_ENROLLED_IN_YEAR: def(409, (studentIdentifier: string, yearName: string) => `Student ${studentIdentifier} is not enrolled in academic year ${yearName}`),
+  SUBJECT_NOT_IN_GRADE: def(400, (subjectName: string, gradeNumber: number) => `${subjectName} is not taught in grade ${gradeNumber}`),
+  NOT_TEACHING_SUBJECT: def(
+    403,
+    (subjectName: string, className: string) => `You don't teach ${subjectName} in class ${className}, so you can't enter its scores`,
+  ),
+  TOTAL_SCORE_REQUIRED: def(400, (subjectName: string, periodName: string) => `${subjectName} is scored directly in ${periodName}: send totalScoreAchieved`, {
+    code: 'VALIDATION_ERROR',
+    details: fieldDetails('totalScoreAchieved'),
+  }),
+  COMPONENTS_NOT_EXPECTED: def(
+    400,
+    (subjectName: string, periodName: string) => `${subjectName} is scored directly in ${periodName}: send totalScoreAchieved, not components`,
+    { code: 'VALIDATION_ERROR', details: fieldDetails('components') },
+  ),
+  COMPONENT_SCORES_REQUIRED: def(
+    400,
+    (subjectName: string, periodName: string) => `${subjectName} is component-based in ${periodName}: send a score for each component`,
+    { code: 'VALIDATION_ERROR', details: fieldDetails('components') },
+  ),
+  TOTAL_NOT_EXPECTED: def(
+    400,
+    (subjectName: string, periodName: string) =>
+      `${subjectName} is component-based in ${periodName}: the total is calculated from the components, so don't send totalScoreAchieved`,
+    { code: 'VALIDATION_ERROR', details: fieldDetails('totalScoreAchieved') },
+  ),
+  COMPONENTS_MISMATCH: def(
+    400,
+    (_unknown: string[], _duplicated: string[], _missing: { componentId: string; name: string }[]) =>
+      "The components sent don't match this month's components: send each one exactly once",
+    {
+      details: (
+        unknown: string[],
+        duplicated: string[],
+        missing: { componentId: string; name: string }[],
+      ) => ({ unknown, duplicated, missing }),
+    },
+  ),
+  SCORE_OUT_OF_RANGE: def(400, (label: string, maxScore: number, _componentId?: string) => `${label} must be between 0 and ${maxScore}`, {
+    details: (_label: string, maxScore: number, componentId?: string) => ({ maxScore, ...(componentId && { componentId }) }),
+  }),
+
   // ── Self-service (/me) ──────────────────────────────────
   OWN_PROFILE_NOT_FOUND: def(404, 'Your login is not linked to a student or staff profile', { code: 'PROFILE_NOT_FOUND' }),
-  OWN_STAFF_PROFILE_NOT_FOUND: def(404, 'Only staff logins have a homeroom class: your login is not linked to a staff profile', {
+  OWN_STAFF_PROFILE_NOT_FOUND: def(404, 'This is only for staff logins: your login is not linked to a staff profile', {
     code: 'PROFILE_NOT_FOUND',
   }),
   NO_HOMEROOM_CLASS: def(404, (yearName: string) => `You are not the homeroom teacher of any class in academic year ${yearName}`),

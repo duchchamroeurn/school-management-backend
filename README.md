@@ -205,8 +205,9 @@ All routes are prefixed with `/api/v1`. Except for `/health` and `/auth/login`, 
 | --- | --- |
 | Health | `GET /health` |
 | Auth | `POST /auth/login`, `POST /auth/change-password`, `GET /auth/me` |
-| Me (own data) | `GET /me/profile`, `GET /me/homeroom?academicYear=` |
+| Me (own data) | `GET /me/profile`, `GET /me/homeroom?academicYear=`, `GET /me/teaching-assignments?academicYear=` |
 | Audit log | `GET /audit-logs` |
+| Scores | `POST /scores/subject` |
 | Users | `GET /users`, `GET /users/:id`, `POST /users`, `PUT /users/:id/roles`, `PATCH /users/:id/status`, `POST /users/:id/reset-password`, `DELETE /users/:id` |
 | Roles | `GET /roles`, `GET /roles/:id` |
 | Staff | CRUD on `/staff`, plus `POST /staff/assign-homeroom` |
@@ -215,6 +216,7 @@ All routes are prefixed with `/api/v1`. Except for `/health` and `/auth/login`, 
 | Grades | CRUD on `/grades` |
 | Subjects | CRUD on `/subjects`, plus `POST /subjects/:id/grades` and `DELETE /subjects/:id/grades/:gradeId` |
 | Class sections | CRUD on `/class-sections`, plus `GET /class-sections/:id/roster` |
+| Teaching assignments | CRUD on `/teaching-assignments` (`PATCH` takes `{ staffId }` to hand the subject to another teacher) |
 | Enrollments | CRUD on `/enrollments` |
 
 "CRUD" means `GET /`, `GET /:id`, `POST /`, `PATCH /:id` and `DELETE /:id`.
@@ -230,6 +232,36 @@ These endpoints always use the signed-in login's own profile, never an id from t
 - `GET /me/homeroom` (`VIEW_OWN_HOMEROOM`): the roster of the class the signed-in teacher is homeroom teacher of, in the same format as `GET /class-sections/:id/roster`.
   - Defaults to the ACTIVE academic year. Pass `?academicYear=2025-2026` for another year.
   - Returns `404 NO_HOMEROOM_CLASS` if they have no homeroom class that year.
+
+### Entering scores
+
+`POST /scores/subject` records one student's score for one subject in one assessment period. Sending it again corrects the score. It returns `201` the first time and `200` after that.
+
+**Who can enter scores:** a teacher can teach several subjects in several classes. Each assignment links a teacher, a subject and a class, and each subject in a class has one teacher.
+- **Teachers** (`ENTER_SCORES`) can only score the subjects they're assigned to, in the classes they're assigned to. For anything else they get `403 NOT_TEACHING_SUBJECT`.
+- **Principal and System Admin** also hold `ENTER_ANY_SCORES`, so they can score any subject in any class, for example to fix a mistake. Every change is audited either way.
+- **Managing assignments:** Principal and System Admin assign teachers with `POST /teaching-assignments { staffId, subjectId, classSectionId }`. The subject must be taught in that class's grade, and the year must not be completed.
+- **A teacher's own list:** teachers see their assignments with `GET /me/teaching-assignments`.
+
+How the subject is scored depends on that period's `SubjectAssessmentConfig`, so the same subject can follow different rules from month to month:
+
+```jsonc
+// Scored directly this month (isComponentBased = false): 0 ≤ totalScoreAchieved ≤ maxTotalScore
+{ "studentId": "…", "subjectId": "…", "assessmentPeriodId": "…", "totalScoreAchieved": 44.5 }
+
+// Component-based this month: one score per component (each 0 ≤ score ≤ its maxScore); the total is their sum
+{ "studentId": "…", "subjectId": "…", "assessmentPeriodId": "…",
+  "components": [{ "componentId": "…", "score": 18 }, { "componentId": "…", "score": 7.5 }, { "componentId": "…", "score": 65 }] }
+```
+
+- **Score format:** scores are JSON numbers with at most two decimals.
+- **Component-based months:** every component of that month's config must be sent exactly once. Otherwise you get `400 COMPONENTS_MISMATCH`, which lists the unknown, duplicated and missing components. The component scores and the total are saved in one transaction.
+- **Refused when:**
+  - the period is locked (`409 PERIOD_LOCKED`) or its academic year is completed
+  - the subject has no rules for that period (`404 SUBJECT_ASSESSMENT_CONFIG_NOT_FOUND`)
+  - the student isn't enrolled that year
+  - the subject isn't taught in the student's grade
+- **Audit:** every new or changed score is recorded as `SUBJECT_SCORE_RECORDED`, with the previous and new total and component scores.
 
 ### Audit log
 

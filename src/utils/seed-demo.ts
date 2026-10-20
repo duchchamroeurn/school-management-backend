@@ -17,6 +17,7 @@ import { createClassSection } from '../services/class-section.service';
 import { enrollContinuingStudent, enrollStudentInClass } from '../services/enrollment.service';
 import { getSchoolLevel } from '../services/school-settings.service';
 import { assignHomeroom } from '../services/staff.service';
+import { createTeachingAssignment } from '../services/teaching-assignment.service';
 import { updateStudent } from '../services/student.service';
 import { createLogin, setStatus } from '../services/user.service';
 import { hashPassword } from './password';
@@ -133,6 +134,19 @@ async function seedDemo() {
   }
   log(`✓ ${CURRENT_YEAR}: ${classes.length} class sections (${classes[0].name}–${classes[classes.length - 1].name}, capacity ${CAPACITY}), homeroom teachers = first ${classes.length} staff`);
 
+  // ── 3b. Teaching assignments: staff[0] (demo.teacher) teaches two subjects across two classes;
+  //        staff[1] teaches Khmer in those classes, so demo.teacher can't score Khmer even in their homeroom
+  const subjectId = Object.fromEntries((await prisma.subject.findMany({ select: { id: true, code: true } })).map((s) => [s.code, s.id]));
+  const teaching = [
+    { staffId: staff[0].id, subject: 'MATH', classes: [classes[0], classes[1]] },
+    { staffId: staff[0].id, subject: 'PHYSICS', classes: [classes[0]] },
+    { staffId: staff[1].id, subject: 'KHMER', classes: [classes[0], classes[1]] },
+  ];
+  for (const t of teaching) {
+    for (const c of t.classes) await createTeachingAssignment({ staffId: t.staffId, subjectId: subjectId[t.subject], classSectionId: c.id });
+  }
+  log(`✓ teaching assignments: ${staff[0].latinName} MATH ${classes[0].name}+${classes[1].name}, PHYSICS ${classes[0].name} · ${staff[1].latinName} KHMER ${classes[0].name}+${classes[1].name}`);
+
   // ── 4. Current year enrollments: lowest grade = new admissions, others promoted from last year
   for (const c of classes) {
     for (const s of c.students) {
@@ -157,7 +171,7 @@ async function seedDemo() {
   const accounts = [
     { username: 'demo.principal', staffId: staff[20].id, role: 'Principal' },
     { username: 'demo.registrar', staffId: staff[21].id, role: 'Registrar' },
-    { username: 'demo.teacher', staffId: staff[0].id, role: 'Teacher' }, // homeroom teacher of the first class
+    { username: 'demo.teacher', staffId: staff[0].id, role: 'Teacher' }, // homeroom of the first class; teaches MATH + PHYSICS
     { username: 'demo.newstaff', staffId: staff[22].id, role: 'Teacher', mustChangePassword: true },
     { username: 'demo.suspended', staffId: staff[23].id, role: 'Teacher', suspended: true },
     { username: 'demo.student', studentId: classes[0].students[0].id, role: SYSTEM_ROLES.STUDENT }, // in the first class

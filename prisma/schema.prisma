@@ -186,7 +186,8 @@ model StaffProfile {
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   // Relations
-  homeroomClasses ClassSection[] @relation("HomeroomTeacher")
+  homeroomClasses     ClassSection[]       @relation("HomeroomTeacher")
+  teachingAssignments TeachingAssignment[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -258,9 +259,10 @@ model Subject {
   isCoreSubject Boolean @default(true) @map("is_core_subject") // True = failing this means failing the year
 
   // Relations
-  gradeSubjects     GradeSubject[]
+  gradeSubjects       GradeSubject[]
   // Scoring rules live per assessment period, not on the subject (see SubjectAssessmentConfig)
-  assessmentConfigs SubjectAssessmentConfig[]
+  assessmentConfigs   SubjectAssessmentConfig[]
+  teachingAssignments TeachingAssignment[]
 
   @@map("subjects")
 }
@@ -288,16 +290,40 @@ model ClassSection {
   homeroomTeacherId String? @map("homeroom_teacher_id")
 
   // Relations
-  grade           Grade              @relation(fields: [gradeId], references: [id])
-  academicYear    AcademicYear       @relation(fields: [academicYearId], references: [id])
-  homeroomTeacher StaffProfile?      @relation("HomeroomTeacher", fields: [homeroomTeacherId], references: [id])
-  enrollments     YearlyEnrollment[]
+  grade               Grade                @relation(fields: [gradeId], references: [id])
+  academicYear        AcademicYear         @relation(fields: [academicYearId], references: [id])
+  homeroomTeacher     StaffProfile?        @relation("HomeroomTeacher", fields: [homeroomTeacherId], references: [id])
+  enrollments         YearlyEnrollment[]
+  teachingAssignments TeachingAssignment[]
 
   // A class section is unique per academic year (e.g., you can't have two 7A's in 2026)
   @@unique([gradeId, sectionName, academicYearId])
   // A teacher is homeroom teacher of at most one class per academic year (NULLs don't conflict)
   @@unique([homeroomTeacherId, academicYearId])
   @@map("class_sections")
+}
+
+// Who teaches which subject in which class (the class fixes grade and academic year). A teacher can
+// teach several subjects and classes; each subject in a class has exactly one teacher. Score entry
+// checks this: a teacher may only enter scores for their own subject in their own classes.
+model TeachingAssignment {
+  id             String @id @default(uuid())
+  staffId        String @map("staff_id")
+  subjectId      String @map("subject_id")
+  classSectionId String @map("class_section_id")
+
+  // Relations
+  staff        StaffProfile @relation(fields: [staffId], references: [id])
+  subject      Subject      @relation(fields: [subjectId], references: [id])
+  classSection ClassSection @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([subjectId, classSectionId])
+  @@index([staffId])
+  @@index([classSectionId])
+  @@map("teaching_assignments")
 }
 
 // ==========================================

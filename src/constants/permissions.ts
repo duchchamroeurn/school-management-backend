@@ -12,6 +12,7 @@ const RESOURCES = {
   GRADE: { module: 'ACADEMIC', plural: 'GRADES', label: 'grade levels' },
   ACADEMIC_YEAR: { module: 'ACADEMIC', plural: 'ACADEMIC_YEARS', label: 'academic years' },
   CLASS_SECTION: { module: 'ACADEMIC', plural: 'CLASS_SECTIONS', label: 'class sections' },
+  TEACHING_ASSIGNMENT: { module: 'ACADEMIC', plural: 'TEACHING_ASSIGNMENTS', label: 'teaching assignments (who teaches which subject in which class)' },
   ENROLLMENT: { module: 'ENROLLMENT', plural: 'ENROLLMENTS', label: 'enrollments' },
 } as const;
 
@@ -46,13 +47,16 @@ export const PERMISSIONS = {
   SCHOOL_SETTINGS: { UPDATE: 'UPDATE_SCHOOL_SETTINGS' },
   // Read-only: the audit log is written by the API itself and can never be edited
   AUDIT_LOG: { LIST: 'LIST_AUDIT_LOGS' },
+  // ENTER: only for subjects and classes the user teaches; ENTER_ANY: any subject and class (corrections)
+  SCORE: { ENTER: 'ENTER_SCORES', ENTER_ANY: 'ENTER_ANY_SCORES' },
 } as const;
 
 export type PermissionCode =
   | { [R in Resource]: ResourceCodes<R>[Action] }[Resource]
   | (typeof PERMISSIONS.SELF_SERVICE)[keyof typeof PERMISSIONS.SELF_SERVICE]
   | typeof PERMISSIONS.SCHOOL_SETTINGS.UPDATE
-  | typeof PERMISSIONS.AUDIT_LOG.LIST;
+  | typeof PERMISSIONS.AUDIT_LOG.LIST
+  | (typeof PERMISSIONS.SCORE)[keyof typeof PERMISSIONS.SCORE];
 
 export interface PermissionDefinition {
   module: string;
@@ -72,6 +76,8 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   { module: 'SELF_SERVICE', code: 'VIEW_OWN_HOMEROOM', description: 'View the roster of the class one is homeroom teacher of' },
   { module: 'SYSTEM', code: 'UPDATE_SCHOOL_SETTINGS', description: 'Change school name, MoEYS code and school level (grades offered)' },
   { module: 'SYSTEM', code: 'LIST_AUDIT_LOGS', description: 'View the audit log of who changed what' },
+  { module: 'ASSESSMENT', code: 'ENTER_SCORES', description: "Enter and correct scores for the subjects and classes one teaches" },
+  { module: 'ASSESSMENT', code: 'ENTER_ANY_SCORES', description: 'Enter and correct scores for any subject and class, without a teaching assignment' },
 ];
 
 export const ALL_PERMISSION_CODES: PermissionCode[] = PERMISSION_DEFINITIONS.map((p) => p.code);

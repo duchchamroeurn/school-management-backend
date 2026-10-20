@@ -29,7 +29,7 @@ export interface AssignHomeroomInput {
 
 const summary = {
   user: { select: { id: true, username: true, status: true } },
-  _count: { select: { homeroomClasses: true } },
+  _count: { select: { homeroomClasses: true, teachingAssignments: true } },
 } as const;
 
 const auditStaff = (s: { id: string; khmerName: string; latinName: string }) =>
@@ -134,6 +134,9 @@ export async function deleteStaff(id: string) {
   }
   if (staff.user) {
     throw Errors.STAFF_HAS_LOGIN(staff.latinName);
+  }
+  if (staff._count.teachingAssignments > 0) {
+    throw Errors.STAFF_HAS_TEACHING(staff.latinName, staff._count.teachingAssignments);
   }
   await prisma.$transaction(async (tx) => {
     await tx.staffProfile.delete({ where: { id } });

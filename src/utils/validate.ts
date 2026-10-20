@@ -118,6 +118,15 @@ export function optionalStringArray(value: unknown, field: string): string[] | u
   return [...new Set(value.map((v: string) => v.trim()))];
 }
 
+// A score: a JSON number, not negative, at most two decimals (e.g. 8, 7.5, 12.25). The upper limit
+// depends on the subject's rules for the month, so the service checks it.
+export function optionalScore(value: unknown, field: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) throw invalid(field, 'must be a number of at least 0');
+  if (Math.abs(value * 100 - Math.round(value * 100)) > 1e-6) throw invalid(field, 'must have at most two decimals');
+  return value;
+}
+
 export function optionalBoolean(value: unknown, field: string): boolean | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== 'boolean') throw invalid(field, 'must be true or false');

@@ -2507,6 +2507,329 @@
       ]
     },
     {
+      "name": "Teaching Assignments",
+      "description": "Who teaches which subject in which class. Teachers can only enter scores for their own assignments (unless they hold ENTER_ANY_SCORES).",
+      "item": [
+        {
+          "name": "Assign teacher to subject in class",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/teaching-assignments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "teaching-assignments"
+              ]
+            },
+            "description": "One teacher per subject per class (409 SUBJECT_ALREADY_TAUGHT otherwise). The subject must be taught in the class's grade.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"staffId\": \"{{staffId}}\",\n  \"subjectId\": \"{{subjectId}}\",\n  \"classSectionId\": \"{{classSectionId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('teachingAssignmentId', pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List teaching assignments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/teaching-assignments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "teaching-assignments"
+              ],
+              "query": [
+                {
+                  "key": "staffId",
+                  "value": "{{staffId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "classSectionId",
+                  "value": "{{classSectionId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "academicYearId",
+                  "value": "{{academicYearId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "subjectId",
+                  "value": "{{subjectId}}",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Filter with staffId, subjectId, classSectionId, academicYearId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get teaching assignment",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/teaching-assignments/{{teachingAssignmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "teaching-assignments",
+                "{{teachingAssignmentId}}"
+              ]
+            },
+            "description": "One assignment with teacher, subject and class."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Hand subject to another teacher",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/teaching-assignments/{{teachingAssignmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "teaching-assignments",
+                "{{teachingAssignmentId}}"
+              ]
+            },
+            "description": "Changes the teacher; scores already entered are kept.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"staffId\": \"{{staffId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "My teaching assignments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/me/teaching-assignments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "teaching-assignments"
+              ]
+            },
+            "description": "The signed-in teacher's subjects and classes in the ACTIVE year (or ?academicYear=2026-2027). Needs ENTER_SCORES."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete teaching assignment",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/teaching-assignments/{{teachingAssignmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "teaching-assignments",
+                "{{teachingAssignmentId}}"
+              ]
+            },
+            "description": "Not allowed in a completed academic year."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Scores",
+      "description": "Score entry by subject teachers. The rules (direct total or components) come from the subject's SubjectAssessmentConfig for that assessment period. Needs `ENTER_SCORES`. Set `assessmentPeriodId` (and component ids) in the environment.",
+      "item": [
+        {
+          "name": "Enter score (direct month)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"studentId\": \"{{studentId}}\",\n  \"subjectId\": \"{{subjectId}}\",\n  \"assessmentPeriodId\": \"{{assessmentPeriodId}}\",\n  \"totalScoreAchieved\": 44.5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/scores/subject",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "scores",
+                "subject"
+              ]
+            },
+            "description": "For a month where the subject is scored directly (isComponentBased = false). 0 ≤ totalScoreAchieved ≤ maxTotalScore, at most two decimals. Sending again corrects the score (201 first time, 200 after)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200 or 201', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+                  "pm.test('has totalScore', () => pm.expect(pm.response.json().data).to.have.property('totalScore'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Enter score (component month)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"studentId\": \"{{studentId}}\",\n  \"subjectId\": \"{{subjectId}}\",\n  \"assessmentPeriodId\": \"{{assessmentPeriodId}}\",\n  \"components\": [\n    {\n      \"componentId\": \"{{componentId1}}\",\n      \"score\": 18\n    },\n    {\n      \"componentId\": \"{{componentId2}}\",\n      \"score\": 7.5\n    },\n    {\n      \"componentId\": \"{{componentId3}}\",\n      \"score\": 65\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/scores/subject",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "scores",
+                "subject"
+              ]
+            },
+            "description": "For a month where the subject is component-based. Send every component of that month's config exactly once (else 400 COMPONENTS_MISMATCH); each 0 ≤ score ≤ its maxScore. The total is calculated as their sum."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200 or 201', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+                  "pm.test('has totalScore', () => pm.expect(pm.response.json().data).to.have.property('totalScore'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Audit Log",
       "description": "Who changed what, and when. Read-only. Needs `LIST_AUDIT_LOGS` (System Admin, Principal).",
       "item": [
