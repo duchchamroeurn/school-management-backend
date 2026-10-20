@@ -31,7 +31,7 @@ export async function getGrade(id: string) {
   if (!grade) throw Errors.GRADE_NOT_FOUND();
 
   const { gradeSubjects, ...rest } = grade;
-  return { ...rest, subjects: gradeSubjects.map((gs) => gs.subject) };
+  return { ...rest, subjects: gradeSubjects.map((gs) => ({ ...gs.subject, weeklyPeriods: gs.weeklyPeriods })) };
 }
 
 export async function createGrade(data: { gradeNumber: number }) {

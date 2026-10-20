@@ -7,6 +7,7 @@ import { Errors } from '../constants/errors';
 import { AcademicYearStatus, Prisma, StudentStatus } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
 import { audit } from './audit.service';
+import { syncLessonTeacher } from './timetable.service';
 
 export interface TeachingAssignmentInput {
   staffId: string;
@@ -123,6 +124,8 @@ export async function createTeachingAssignment(input: TeachingAssignmentInput) {
         data: { staffProfileId: input.staffId, subjectId: subject.id, classSectionId: classSection.id, academicYearId: classSection.academicYearId },
         include: details,
       });
+      // Lessons of this subject already in the class's timetable now have their teacher (refused on a clash)
+      await syncLessonTeacher(tx, classSection.id, subject.id, created.staffProfile);
       await audit(tx, { ...auditAssignment(created), action: 'TEACHING_ASSIGNMENT_CREATED', after: auditSnapshot(created) });
       return created;
     });
@@ -143,6 +146,7 @@ export async function reassignTeacher(id: string, staffId: string) {
     assertYearOpen(current.classSection.academicYear);
     await assertStaffExists(tx, staffId);
     const updated = await tx.subjectTeacherAssignment.update({ where: { id }, data: { staffProfileId: staffId }, include: details });
+    await syncLessonTeacher(tx, updated.classSectionId, updated.subjectId, updated.staffProfile);
     await audit(tx, { ...auditAssignment(updated), action: 'TEACHING_ASSIGNMENT_UPDATED', before: auditSnapshot(current), after: auditSnapshot(updated) });
     return updated;
   });
@@ -153,6 +157,8 @@ export async function deleteTeachingAssignment(id: string) {
     const current = await loadAssignment(tx, id);
     assertYearOpen(current.classSection.academicYear);
     await tx.subjectTeacherAssignment.delete({ where: { id } });
+    // The subject's lessons stay in the timetable, without a teacher until someone is assigned
+    await syncLessonTeacher(tx, current.classSectionId, current.subjectId, null);
     await audit(tx, { ...auditAssignment(current), action: 'TEACHING_ASSIGNMENT_DELETED', before: auditSnapshot(current) });
   });
 }

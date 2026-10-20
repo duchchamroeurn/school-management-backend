@@ -1,5 +1,5 @@
 import { Errors } from '../constants/errors';
-import { AcademicYearStatus, Prisma } from '../generated/prisma/client';
+import { AcademicYearStatus, Prisma, Shift } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
 import { audit, scalars } from './audit.service';
 
@@ -9,6 +9,8 @@ export interface CreateClassSectionInput {
   gradeId: string;
   academicYearId: string;
   homeroomTeacherId?: string | null; // StaffProfile id
+  shift?: Shift; // defaults to MORNING
+  roomId?: string | null; // home room
 }
 
 // Grade and academic year are fixed once created; move students by enrolling them elsewhere instead
@@ -16,6 +18,8 @@ export interface UpdateClassSectionInput {
   sectionName?: string;
   maxCapacity?: number;
   homeroomTeacherId?: string | null; // null = remove homeroom teacher
+  shift?: Shift; // only while the class has no lessons in its timetable
+  roomId?: string | null; // null = no home room
 }
 
 export const MAX_CAPACITY_LIMIT = 100;
@@ -24,13 +28,14 @@ export const classSectionDetails = {
   grade: true,
   academicYear: { select: { id: true, name: true, status: true } },
   homeroomTeacher: { select: { id: true, khmerName: true, latinName: true } },
+  room: { select: { id: true, name: true } },
   _count: { select: { enrollments: true } },
 } as const;
 
 type ClassSectionWithDetails = Prisma.ClassSectionGetPayload<{ include: typeof classSectionDetails }>;
 
 const auditSnapshot = (c: ClassSectionWithDetails) => ({
-  ...scalars(c),
+  ...scalars(c, ['room']), // roomId is kept; the included room relation is not
   homeroomTeacher: c.homeroomTeacher && `${c.homeroomTeacher.latinName} (${c.homeroomTeacher.khmerName})`,
 });
 
@@ -72,6 +77,17 @@ export async function assertTeacherFreeForYear(homeroomTeacherId: string, academ
   if (other) {
     throw Errors.TEACHER_ALREADY_ASSIGNED(other.homeroomTeacher!, `${other.grade.gradeNumber}${other.sectionName}`, other.academicYear.name, other.id);
   }
+}
+
+/** A room holds at most one class per shift each year (also a DB unique constraint) */
+async function assertRoomFree(roomId: string, shift: Shift, academicYearId: string, exceptClassSectionId?: string) {
+  const room = await prisma.room.findUnique({ where: { id: roomId } });
+  if (!room) throw Errors.ROOM_NOT_FOUND();
+  const other = await prisma.classSection.findFirst({
+    where: { roomId, shift, academicYearId, ...(exceptClassSectionId && { id: { not: exceptClassSectionId } }) },
+    include: { grade: true },
+  });
+  if (other) throw Errors.ROOM_SHIFT_TAKEN(room.name, shift, `${other.grade.gradeNumber}${other.sectionName}`);
 }
 
 async function assertNameFree(gradeId: string, sectionName: string, academicYearId: string, exceptClassSectionId?: string) {
@@ -129,6 +145,7 @@ export async function createClassSection(data: CreateClassSectionInput) {
   const checks = async () => {
     await assertNameFree(grade.id, sectionName, academicYear.id);
     if (data.homeroomTeacherId) await assertTeacherFreeForYear(data.homeroomTeacherId, academicYear.id);
+    if (data.roomId) await assertRoomFree(data.roomId, data.shift ?? Shift.MORNING, academicYear.id);
   };
   if (data.homeroomTeacherId) await assertTeacherExists(data.homeroomTeacherId);
   await checks();
@@ -143,6 +160,8 @@ export async function createClassSection(data: CreateClassSectionInput) {
             gradeId: grade.id,
             academicYearId: academicYear.id,
             homeroomTeacherId: data.homeroomTeacherId ?? null,
+            shift: data.shift,
+            roomId: data.roomId ?? null,
           },
           include: classSectionDetails,
         });
@@ -166,9 +185,17 @@ export async function updateClassSection(id: string, data: UpdateClassSectionInp
     }
   }
 
+  if (data.shift !== undefined && data.shift !== existing.shift) {
+    const lessons = await prisma.timetableEntry.count({ where: { classSectionId: id } });
+    if (lessons) throw Errors.CLASS_HAS_TIMETABLE(`${existing.grade.gradeNumber}${existing.sectionName}`, lessons);
+  }
+  const roomId = data.roomId === undefined ? existing.roomId : data.roomId;
+  const shift = data.shift ?? existing.shift;
+
   const checks = async () => {
     if (sectionName !== undefined) await assertNameFree(existing.gradeId, sectionName, existing.academicYearId, id);
     if (data.homeroomTeacherId) await assertTeacherFreeForYear(data.homeroomTeacherId, existing.academicYearId, id);
+    if (roomId && (roomId !== existing.roomId || shift !== existing.shift)) await assertRoomFree(roomId, shift, existing.academicYearId, id);
   };
   if (data.homeroomTeacherId) await assertTeacherExists(data.homeroomTeacherId);
   await checks();
@@ -178,7 +205,7 @@ export async function updateClassSection(id: string, data: UpdateClassSectionInp
       prisma.$transaction(async (tx) => {
         const updated = await tx.classSection.update({
           where: { id },
-          data: { sectionName, maxCapacity: data.maxCapacity, homeroomTeacherId: data.homeroomTeacherId },
+          data: { sectionName, maxCapacity: data.maxCapacity, homeroomTeacherId: data.homeroomTeacherId, shift: data.shift, roomId: data.roomId },
           include: classSectionDetails,
         });
         await audit(tx, { ...auditClassSection(updated), action: 'CLASS_SECTION_UPDATED', before: auditSnapshot(existing), after: auditSnapshot(updated) });

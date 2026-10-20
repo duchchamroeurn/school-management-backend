@@ -17,6 +17,7 @@ router.delete('/:id', requirePermission(SUBJECT.DELETE), subjectController.remov
 
 // Grade assignment changes the subject's curriculum, so it needs UPDATE_SUBJECT
 router.post('/:id/grades', requirePermission(SUBJECT.UPDATE), subjectController.assignToGrades);
+router.patch('/:id/grades/:gradeId', requirePermission(SUBJECT.UPDATE), subjectController.setWeeklyPeriods);
 router.delete('/:id/grades/:gradeId', requirePermission(SUBJECT.UPDATE), subjectController.unassignFromGrade);
 
 export default router;

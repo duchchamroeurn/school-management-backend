@@ -220,6 +220,38 @@ const ERROR_DEFS = {
   NO_PREVIOUS_ENROLLMENT: def(409, (studentIdentifier: string) => `Student ${studentIdentifier} has no earlier enrollment; use NEW_ADMISSION`),
   SAME_CLASS_SECTION: def(400, 'Student is already in this class section'),
 
+  // ── Rooms, time slots & timetable ───────────────────────
+  ROOM_NOT_FOUND: def(404, 'Room not found'),
+  ROOM_EXISTS: def(409, (name: string) => `A room named "${name}" already exists`),
+  ROOM_IN_USE: def(409, (name: string, classes: number) => `${name} is the home room of ${classes} class(es); move them first`),
+  ROOM_SHIFT_TAKEN: def(
+    409,
+    (room: string, shift: string, otherClass: string) => `${room} is already used by class ${otherClass} in the ${shift.toLowerCase()} shift`,
+  ),
+  CLASS_HAS_TIMETABLE: def(409, (className: string, lessons: number) => `Class ${className} has ${lessons} lesson(s) in its timetable; clear them before changing its shift`),
+  TIME_SLOT_NOT_FOUND: def(404, 'Time slot not found'),
+  TIME_SLOT_EXISTS: def(409, (label: string) => `There is already a time slot for ${label}`),
+  TIME_SLOT_OVERLAP: def(409, (label: string, other: string) => `${label} overlaps ${other}`),
+  TIME_SLOT_INVALID: def(400, 'endTime must be after startTime (both HH:MM, 24-hour)', { code: 'VALIDATION_ERROR', details: fieldDetails('endTime') }),
+  TIME_SLOT_IN_USE: def(409, (label: string, lessons: number) => `${label} has ${lessons} lesson(s) scheduled; remove them first`),
+  WRONG_SHIFT: def(400, (className: string, shift: string, slot: string) => `Class ${className} studies in the ${shift.toLowerCase()} shift, but ${slot} is not`),
+  QUOTA_EXCEEDED: def(
+    409,
+    (subjectName: string, className: string, quota: number) => `${subjectName} already has its ${quota} lesson(s) per week in class ${className} (the MoEYS quota)`,
+  ),
+  TEACHER_CLASH: def(
+    409,
+    (teacherName: string, slot: string, otherClass: string) => `${teacherName} already teaches class ${otherClass} on ${slot}`,
+    { details: (_t: string, _s: string, otherClass: string) => ({ otherClass }) },
+  ),
+  TEACHER_CLASHES: def(
+    409,
+    (teacherName: string, _clashes: { slot: string; otherClass: string }[]) =>
+      `${teacherName} already teaches other classes at times this subject is scheduled; change the timetable first`,
+    { code: 'TEACHER_CLASH', details: (_t: string, clashes: { slot: string; otherClass: string }[]) => ({ clashes }) },
+  ),
+  QUOTA_INVALID: def(400, 'weeklyPeriods must be a whole number from 0 to 20, or null', { code: 'VALIDATION_ERROR', details: fieldDetails('weeklyPeriods') }),
+
   // ── Assessment periods & rules ──────────────────────────
   ASSESSMENT_PERIOD_EXISTS: def(409, (name: string, yearName: string) => `A period named "${name}" already exists in ${yearName}`),
   PERIOD_OUTSIDE_YEAR: def(

@@ -21,7 +21,7 @@ export interface ListSubjectsFilter {
 
 const withGrades = {
   gradeSubjects: {
-    select: { grade: { select: { id: true, gradeNumber: true, level: true } } },
+    select: { weeklyPeriods: true, grade: { select: { id: true, gradeNumber: true, level: true } } },
     orderBy: { grade: { gradeNumber: 'asc' } },
   },
 } satisfies Prisma.SubjectInclude;
@@ -30,7 +30,7 @@ type SubjectWithGrades = Prisma.SubjectGetPayload<{ include: typeof withGrades }
 
 const toDto = ({ gradeSubjects, ...subject }: SubjectWithGrades) => ({
   ...subject,
-  grades: gradeSubjects.map((gs) => gs.grade),
+  grades: gradeSubjects.map((gs) => ({ ...gs.grade, weeklyPeriods: gs.weeklyPeriods })),
 });
 
 const auditSubject = (s: { id: string; code: string; latinName: string }) =>
@@ -130,6 +130,27 @@ export async function assignToGrades(id: string, gradeIds: string[]) {
     assigned: newlyAssigned,
     alreadyAssigned: alreadyAssigned.map((g) => g.gradeNumber).sort((a, b) => a - b),
   };
+}
+
+/** MoEYS hourly quota: lessons of the subject per week in that grade (null = none set). Checked by the timetable. */
+export async function setWeeklyPeriods(id: string, gradeId: string, weeklyPeriods: number | null) {
+  const subject = await loadSubject(id);
+  const link = subject.gradeSubjects.find((gs) => gs.grade.id === gradeId);
+  if (!link) {
+    const grade = await prisma.grade.findUnique({ where: { id: gradeId } });
+    if (!grade) throw Errors.GRADE_NOT_FOUND();
+    throw Errors.NOT_ASSIGNED(subject.latinName, grade.gradeNumber);
+  }
+  await prisma.$transaction(async (tx) => {
+    await tx.gradeSubject.update({ where: { gradeId_subjectId: { gradeId, subjectId: id } }, data: { weeklyPeriods } });
+    await audit(tx, {
+      ...auditSubject(subject),
+      action: 'SUBJECT_QUOTA_SET',
+      before: { grade: link.grade.gradeNumber, weeklyPeriods: link.weeklyPeriods },
+      after: { grade: link.grade.gradeNumber, weeklyPeriods },
+    });
+  });
+  return getSubject(id);
 }
 
 export async function unassignFromGrade(id: string, gradeId: string) {

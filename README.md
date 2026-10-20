@@ -176,9 +176,9 @@ npm run typecheck   # type-check the code and the tests
 The tests ([`tests/`](tests)) call the real API with Supertest against a separate database, `school_management_test`, on the same PostgreSQL server. So the Docker `db` service, or your local PostgreSQL, must be running.
 
 Each run starts clean:
-1. The test database is created if it doesn't exist.
+1. The test database is dropped and created again.
 2. The schema is pushed to it.
-3. Every table is emptied, and the real seed runs.
+3. The real seed runs.
 4. Three academic years are added: 2025-2026 completed, 2026-2027 active and 2027-2028 upcoming.
 
 The suite refuses to run against any database whose name doesn't end in `_test`, so it can never touch your development data. To use another server, set `TEST_DATABASE_URL`.
@@ -253,6 +253,8 @@ All routes are prefixed with `/api/v1`. Except for `/health` and `/auth/login`, 
 | Grades | CRUD on `/grades` |
 | Subjects | CRUD on `/subjects`, plus `POST /subjects/:id/grades` and `DELETE /subjects/:id/grades/:gradeId` |
 | Class sections | CRUD on `/class-sections`, plus `GET /class-sections/:id/roster` and `POST /class-sections/:id/promote` |
+| Timetable | `GET /timetable/classes/:classSectionId`, `PUT/DELETE /timetable/classes/:classSectionId/slots/:timeSlotId`, `GET /timetable/teachers/:staffId`, `GET /timetable/me`, `GET /timetable/quotas`, CRUD on `/timetable/time-slots` |
+| Rooms | CRUD on `/rooms` |
 | Subject teachers | `GET /assignments/class/:classSectionId`, plus CRUD on `/assignments/subject-teacher` (`PATCH` takes `{ staffId }` to hand the subject to another teacher) |
 | Enrollments | CRUD on `/enrollments` |
 
@@ -337,6 +339,41 @@ POST /students/:id/guardians
 - **Splitting a class:** to divide a class across two target classes, run it twice and exclude a different half of the students each time.
 - **Dry run:** use `dryRun: true` to preview the result first; it returns `200`. A real run returns `201`.
 - **Audit:** each new enrollment and graduation is audited, plus one `CLASS_PROMOTED` entry for the class with the counts.
+
+### Timetable
+
+Classes study in one of two half-day shifts (វេន): morning (ព្រឹក) or afternoon (រសៀល).
+- **Shift and room:** set on the class with `PATCH /class-sections/:id { shift, roomId }`. The default is morning.
+- **Shift lock:** once a class has lessons, its shift can't change until they're cleared.
+
+**Rooms:** create them with `POST /rooms`. Each class has a home room, and two classes share a room only if they're in different shifts of the same year. This is how a school fits more classes than it has rooms.
+
+**Bell schedule:** the school's time slots, one per day, shift and period. The seed creates a default if there is none:
+- 5 periods of 45 minutes per shift, with a 15-minute break after period 3.
+- Morning Monday–Saturday, 07:00–11:00; afternoon Monday–Friday, 13:00–17:00. Saturday afternoon has no slots.
+- That gives morning classes 30 lessons a week and afternoon classes 25.
+- Change times or add slots through `/timetable/time-slots`. A slot that has lessons can still change its times, but not its day, shift or period.
+
+**MoEYS quotas:** set a subject's lessons per week in a grade with `PATCH /subjects/:id/grades/:gradeId { weeklyPeriods }`, for example Mathematics 5 or Morality 1.
+
+**Placing lessons:** `PUT /timetable/classes/:classSectionId/slots/:timeSlotId { subjectId }` puts a subject in a slot, replacing any lesson there. `DELETE` frees the slot. Both need `MANAGE_TIMETABLE`, which Principal and System Admin hold. Every placement is checked:
+- **Shift:** the slot must be in the class's shift (`400 WRONG_SHIFT`).
+- **Grade:** the subject must be taught in the class's grade.
+- **Quota:** the subject can't go over its weekly quota (`409 QUOTA_EXCEEDED`).
+- **Rule 1, teachers:** a teacher teaches one class at a time (`409 TEACHER_CLASH`, naming the other class).
+- **Rule 2, classes:** a class has one lesson per slot. Placing a lesson again replaces the old one.
+
+Both rules are also database constraints, so they hold even if two people edit at once.
+
+**Teachers on lessons:** a lesson's teacher is the subject's assigned teacher in that class.
+- **Assigning or reassigning** a subject updates its lessons. It's refused if the new teacher would clash.
+- **Removing an assignment** keeps the lessons, without a teacher.
+
+**Reading timetables:**
+- `GET /timetable/classes/:classSectionId`: the class's week (every slot, with lesson or free), each subject's quota status (`MET`, `MISSING`, `OVER` or `NO_QUOTA`), and whether the quotas fit in the shift.
+- `GET /timetable/teachers/:staffId`: a teacher's week across both shifts.
+- `GET /timetable/me`: the signed-in teacher's lessons, or a student's class week.
+- `GET /timetable/quotas`: every class with the lessons still missing to meet its quotas.
 
 ### Setting up grading
 

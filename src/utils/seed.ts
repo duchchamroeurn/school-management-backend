@@ -155,6 +155,27 @@ async function seedGradesAndSubjects() {
   );
 }
 
+// Default bell schedule (time slots), only when the school has none yet: 5 periods of 45 minutes per shift with a
+// 15-minute break after period 3. Morning Monday–Saturday 07:00–11:00, afternoon Monday–Friday 13:00–17:00
+// (no Saturday afternoon). Schools change the times or add slots through /api/v1/timetable/time-slots.
+const SHIFT_PERIODS = {
+  MORNING: [['07:00', '07:45'], ['07:45', '08:30'], ['08:30', '09:15'], ['09:30', '10:15'], ['10:15', '11:00']],
+  AFTERNOON: [['13:00', '13:45'], ['13:45', '14:30'], ['14:30', '15:15'], ['15:30', '16:15'], ['16:15', '17:00']],
+} as const;
+const SHIFT_DAYS = { MORNING: [1, 2, 3, 4, 5, 6], AFTERNOON: [1, 2, 3, 4, 5] } as const;
+
+async function seedTimeSlots() {
+  if (await prisma.timeSlot.count()) {
+    console.log('  ✓ time slots: kept the school\'s own bell schedule');
+    return;
+  }
+  const data = (['MORNING', 'AFTERNOON'] as const).flatMap((shift) =>
+    SHIFT_DAYS[shift].flatMap((dayOfWeek) => SHIFT_PERIODS[shift].map(([startTime, endTime], i) => ({ dayOfWeek, shift, period: i + 1, startTime, endTime }))),
+  );
+  await prisma.timeSlot.createMany({ data });
+  console.log(`  ✓ ${data.length} time slots (morning Mon–Sat, afternoon Mon–Fri, 5 periods each)`);
+}
+
 async function seedRootAdmin() {
   const adminRole = await prisma.role.findUniqueOrThrow({ where: { latinName: SYSTEM_ADMIN_ROLE } });
 
@@ -183,6 +204,7 @@ async function main() {
   await seedPermissions();
   await seedRoles();
   await seedGradesAndSubjects();
+  await seedTimeSlots();
   await seedRootAdmin();
   console.log('Done.');
 }

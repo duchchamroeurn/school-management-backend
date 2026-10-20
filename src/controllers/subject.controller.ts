@@ -70,3 +70,10 @@ export async function assignToGrades(req: Request<{ id: string }>, res: Response
 export async function unassignFromGrade(req: Request<{ id: string; gradeId: string }>, res: Response) {
   res.json({ status: 'success', data: await subjectService.unassignFromGrade(req.params.id, req.params.gradeId) });
 }
+
+// PATCH /api/v1/subjects/:id/grades/:gradeId — { weeklyPeriods } (MoEYS lessons per week in that grade; null clears)
+export async function setWeeklyPeriods(req: Request<{ id: string; gradeId: string }>, res: Response) {
+  const raw = bodyOf(req).weeklyPeriods;
+  if (raw !== null && (typeof raw !== 'number' || !Number.isInteger(raw) || raw < 0 || raw > 20)) throw Errors.QUOTA_INVALID();
+  res.json({ status: 'success', data: await subjectService.setWeeklyPeriods(req.params.id, req.params.gradeId, raw as number | null) });
+}

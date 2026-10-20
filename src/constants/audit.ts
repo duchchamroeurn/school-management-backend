@@ -23,7 +23,7 @@ export const AUDIT_ACTIONS = {
   TeachingAssignment: ['TEACHING_ASSIGNMENT_CREATED', 'TEACHING_ASSIGNMENT_UPDATED', 'TEACHING_ASSIGNMENT_DELETED'],
   AcademicYear: ['ACADEMIC_YEAR_CREATED', 'ACADEMIC_YEAR_UPDATED', 'ACADEMIC_YEAR_DELETED'],
   Grade: ['GRADE_CREATED', 'GRADE_UPDATED', 'GRADE_DELETED'],
-  Subject: ['SUBJECT_CREATED', 'SUBJECT_UPDATED', 'SUBJECT_DELETED', 'SUBJECT_GRADES_ASSIGNED', 'SUBJECT_GRADE_UNASSIGNED'],
+  Subject: ['SUBJECT_CREATED', 'SUBJECT_UPDATED', 'SUBJECT_DELETED', 'SUBJECT_GRADES_ASSIGNED', 'SUBJECT_GRADE_UNASSIGNED', 'SUBJECT_QUOTA_SET'],
   SchoolSettings: ['SCHOOL_SETTINGS_UPDATED'],
   // RULES_*: a subject's scoring rules (SubjectAssessmentConfig + components) in the period
   AssessmentPeriod: [
@@ -36,6 +36,10 @@ export const AUDIT_ACTIONS = {
     'SUBJECT_RULES_REMOVED',
     'SUBJECT_RULES_COPIED',
   ],
+  Room: ['ROOM_CREATED', 'ROOM_UPDATED', 'ROOM_DELETED'],
+  TimeSlot: ['TIME_SLOT_CREATED', 'TIME_SLOT_UPDATED', 'TIME_SLOT_DELETED'],
+  // entityId = the class section; before/after hold the slot's subject and teacher
+  Timetable: ['LESSON_SCHEDULED', 'LESSON_REMOVED'],
   // entityId = the MonthlyResult; the teacher's comment on a report card
   Result: ['RESULT_REMARKS_UPDATED'],
   // entityId = the MonthlySubjectScore; before/after hold the total and each component score

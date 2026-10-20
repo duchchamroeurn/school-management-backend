@@ -4083,6 +4083,374 @@
       ]
     },
     {
+      "name": "Timetable",
+      "description": "Shifts, rooms, the bell schedule, MoEYS weekly quotas and class timetables with clash prevention. Writes need MANAGE_TIMETABLE.",
+      "item": [
+        {
+          "name": "List time slots",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/timetable/time-slots",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "timetable",
+                "time-slots"
+              ],
+              "query": [
+                {
+                  "key": "shift",
+                  "value": "MORNING"
+                }
+              ]
+            },
+            "description": "The bell schedule; filter by shift."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create room",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/rooms",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rooms"
+              ]
+            },
+            "description": "A classroom; morning and afternoon classes can share it.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Building A · Room 3\",\n  \"capacity\": 45\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('roomId', pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Set class shift and room",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/class-sections/{{classSectionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "class-sections",
+                "{{classSectionId}}"
+              ]
+            },
+            "description": "One class per room per shift; the shift is locked once the class has lessons.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shift\": \"MORNING\",\n  \"roomId\": \"{{roomId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Set weekly quota",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/subjects/{{subjectId}}/grades/{{gradeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subjects",
+                "{{subjectId}}",
+                "grades",
+                "{{gradeId}}"
+              ]
+            },
+            "description": "MoEYS lessons per week for the subject in that grade (null clears).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"weeklyPeriods\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Place lesson",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/timetable/classes/{{classSectionId}}/slots/{{timeSlotId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "timetable",
+                "classes",
+                "{{classSectionId}}",
+                "slots",
+                "{{timeSlotId}}"
+              ]
+            },
+            "description": "Replaces the lesson in the slot. Checks the shift, the quota and teacher clashes.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subjectId\": \"{{subjectId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Class timetable",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/timetable/classes/{{classSectionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "timetable",
+                "classes",
+                "{{classSectionId}}"
+              ]
+            },
+            "description": "Week grid plus each subject's quota status."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Teacher timetable",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/timetable/teachers/{{staffId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "timetable",
+                "teachers",
+                "{{staffId}}"
+              ]
+            },
+            "description": "A teacher's lessons across both shifts."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "My timetable",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/timetable/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "timetable",
+                "me"
+              ]
+            },
+            "description": "Teacher: own lessons. Student: own class week."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Quota overview",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/timetable/quotas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "timetable",
+                "quotas"
+              ]
+            },
+            "description": "Every class with the lessons still missing to meet the quotas."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Remove lesson",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/timetable/classes/{{classSectionId}}/slots/{{timeSlotId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "timetable",
+                "classes",
+                "{{classSectionId}}",
+                "slots",
+                "{{timeSlotId}}"
+              ]
+            },
+            "description": "Frees the slot."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Scores",
       "description": "Score entry by subject teachers. The rules (direct total or components) come from the subject's SubjectAssessmentConfig for that assessment period. Needs `ENTER_SCORES`. Set `assessmentPeriodId` (and component ids) in the environment.",
       "item": [

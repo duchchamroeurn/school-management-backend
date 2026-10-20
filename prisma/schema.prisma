@@ -56,6 +56,12 @@ enum EnrollmentType {
   REPEATING
 }
 
+// Half-day shift (វេន): with too few classrooms, classes study either in the morning or in the afternoon
+enum Shift {
+  MORNING // ព្រឹក ~07:00–11:00
+  AFTERNOON // រសៀល ~13:00–17:00
+}
+
 // How a guardian is related to a student
 enum GuardianRelationship {
   FATHER // ឪពុក
@@ -213,6 +219,7 @@ model StaffProfile {
   // Relations
   homeroomClasses           ClassSection[]             @relation("HomeroomTeacher")
   subjectTeacherAssignments SubjectTeacherAssignment[]
+  timetableEntries          TimetableEntry[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -302,6 +309,7 @@ model AcademicYear {
   enrollments               YearlyEnrollment[]
   assessmentPeriods         AssessmentPeriod[]
   subjectTeacherAssignments SubjectTeacherAssignment[]
+  timetableEntries          TimetableEntry[]
 
   @@map("academic_years")
 }
@@ -330,14 +338,17 @@ model Subject {
   // Scoring rules live per assessment period, not on the subject (see SubjectAssessmentConfig)
   assessmentConfigs         SubjectAssessmentConfig[]
   subjectTeacherAssignments SubjectTeacherAssignment[]
+  timetableEntries          TimetableEntry[]
   attendanceRecords         AttendanceRecord[]
 
   @@map("subjects")
 }
 
 model GradeSubject {
-  gradeId   String @map("grade_id")
-  subjectId String @map("subject_id")
+  gradeId       String @map("grade_id")
+  subjectId     String @map("subject_id")
+  // MoEYS hourly quota: lessons of this subject per week in this grade (e.g. Mathematics 5); null = not set
+  weeklyPeriods Int?   @map("weekly_periods")
 
   grade   Grade   @relation(fields: [gradeId], references: [id], onDelete: Cascade)
   subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
@@ -356,6 +367,10 @@ model ClassSection {
   gradeId           String  @map("grade_id")
   academicYearId    String  @map("academic_year_id")
   homeroomTeacherId String? @map("homeroom_teacher_id")
+  // The class only has lessons in this shift's time slots
+  shift             Shift   @default(MORNING)
+  // Home room; a room is shared only by classes of different shifts
+  roomId            String? @map("room_id")
 
   // Relations
   grade                     Grade                      @relation(fields: [gradeId], references: [id])
@@ -364,11 +379,15 @@ model ClassSection {
   enrollments               YearlyEnrollment[]
   subjectTeacherAssignments SubjectTeacherAssignment[]
   attendanceRecords         AttendanceRecord[]
+  room                      Room?                      @relation(fields: [roomId], references: [id])
+  timetableEntries          TimetableEntry[]
 
   // A class section is unique per academic year (e.g., you can't have two 7A's in 2026)
   @@unique([gradeId, sectionName, academicYearId])
   // A teacher is homeroom teacher of at most one class per academic year (NULLs don't conflict)
   @@unique([homeroomTeacherId, academicYearId])
+  // A room holds one morning class and one afternoon class per year at most (NULLs don't conflict)
+  @@unique([roomId, shift, academicYearId])
   @@map("class_sections")
 }
 
@@ -398,6 +417,64 @@ model SubjectTeacherAssignment {
   @@index([classSectionId])
   @@index([academicYearId])
   @@map("subject_teacher_assignments")
+}
+
+// A classroom. Each class has a home room; morning and afternoon classes take turns in the same rooms.
+model Room {
+  id       String @id @default(uuid())
+  name     String @unique // e.g. "Building A · Room 3"
+  capacity Int? // seats, for information
+
+  classes ClassSection[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("rooms")
+}
+
+// One lesson period of the school week, e.g. Monday, morning shift, period 1, 07:00–07:45. The school's bell
+// schedule; it applies to every year. Days are 1 = Monday … 6 = Saturday (Saturday afternoon has no slots).
+model TimeSlot {
+  id        String @id @default(uuid())
+  dayOfWeek Int    @map("day_of_week")
+  shift     Shift
+  period    Int // 1, 2, … within the shift
+  startTime String @map("start_time") // "07:00"
+  endTime   String @map("end_time") // "07:45"
+
+  entries TimetableEntry[]
+
+  @@unique([dayOfWeek, shift, period])
+  @@map("time_slots")
+}
+
+// One lesson in a class's weekly timetable. The two golden rules are database constraints:
+//   - a class has at most one lesson in a time slot                 (classSectionId, timeSlotId)
+//   - a teacher teaches at most one class in a time slot each year   (staffProfileId, timeSlotId, academicYearId)
+// staffProfileId is the subject's assigned teacher in that class (SubjectTeacherAssignment), kept in step when
+// the assignment changes; null while the subject has no teacher.
+model TimetableEntry {
+  id             String  @id @default(uuid())
+  classSectionId String  @map("class_section_id")
+  timeSlotId     String  @map("time_slot_id")
+  subjectId      String  @map("subject_id")
+  staffProfileId String? @map("staff_profile_id")
+  academicYearId String  @map("academic_year_id")
+
+  classSection ClassSection  @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+  timeSlot     TimeSlot      @relation(fields: [timeSlotId], references: [id])
+  subject      Subject       @relation(fields: [subjectId], references: [id])
+  staffProfile StaffProfile? @relation(fields: [staffProfileId], references: [id])
+  academicYear AcademicYear  @relation(fields: [academicYearId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([classSectionId, timeSlotId])
+  @@unique([staffProfileId, timeSlotId, academicYearId])
+  @@index([subjectId])
+  @@map("timetable_entries")
 }
 
 // ==========================================

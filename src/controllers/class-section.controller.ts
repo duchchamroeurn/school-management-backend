@@ -1,6 +1,9 @@
 import { Request, Response } from 'express';
 import * as classSectionService from '../services/class-section.service';
-import { bodyOf, nullableString, optionalInt, optionalString, queryString, required } from '../utils/validate';
+import { Shift } from '../generated/prisma/client';
+import { bodyOf, nullableString, optionalEnum, optionalInt, optionalString, queryString, required } from '../utils/validate';
+
+const SHIFTS = Object.values(Shift);
 
 const capacityOf = (value: unknown) => optionalInt(value, 'maxCapacity', 1, classSectionService.MAX_CAPACITY_LIMIT);
 
@@ -27,6 +30,8 @@ export async function create(req: Request, res: Response) {
     gradeId: required(optionalString(body.gradeId, 'gradeId'), 'gradeId'),
     academicYearId: required(optionalString(body.academicYearId, 'academicYearId'), 'academicYearId'),
     homeroomTeacherId: nullableString(body.homeroomTeacherId, 'homeroomTeacherId'),
+    shift: optionalEnum(body.shift, 'shift', SHIFTS),
+    roomId: nullableString(body.roomId, 'roomId'),
   });
   res.status(201).json({ status: 'success', data: classSection });
 }
@@ -38,6 +43,8 @@ export async function update(req: Request<{ id: string }>, res: Response) {
     sectionName: optionalString(body.sectionName, 'sectionName', 10),
     maxCapacity: capacityOf(body.maxCapacity),
     homeroomTeacherId: nullableString(body.homeroomTeacherId, 'homeroomTeacherId'),
+    shift: optionalEnum(body.shift, 'shift', SHIFTS),
+    roomId: nullableString(body.roomId, 'roomId'),
   });
   res.json({ status: 'success', data: classSection });
 }
