@@ -1,0 +1,9 @@
+node_modules
+.env
+dist
+coverage
+
+/src/generated/prisma
+
+# Real student/staff personal data — never commit
+/data
