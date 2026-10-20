@@ -1645,6 +1645,284 @@
       ]
     },
     {
+      "name": "Guardians",
+      "description": "Parents and guardians, shared between siblings. Read with VIEW_STUDENT, manage with UPDATE_STUDENT.",
+      "item": [
+        {
+          "name": "Add new guardian to student",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/students/{{studentId}}/guardians",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students",
+                "{{studentId}}",
+                "guardians"
+              ]
+            },
+            "description": "Creates the guardian and links them. The student's first guardian becomes the primary contact.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"relationship\": \"MOTHER\",\n  \"guardian\": {\n    \"khmerName\": \"សុខ ចាន់ធី\",\n    \"latinName\": \"Sok Chanthy\",\n    \"phone\": \"012 345 678\",\n    \"occupation\": \"កសិករ\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('guardianId', pm.response.json().data.guardianId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search guardians",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/guardians",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "guardians"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "012345"
+                }
+              ]
+            },
+            "description": "By Khmer or Latin name, or phone number (any format)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Link existing guardian to sibling",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/students/{{studentId2}}/guardians",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students",
+                "{{studentId2}}",
+                "guardians"
+              ]
+            },
+            "description": "Links a guardian who is already recorded (e.g. a sibling's parent).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"relationship\": \"MOTHER\",\n  \"guardianId\": \"{{guardianId}}\",\n  \"isPrimaryContact\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Student's guardians",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/students/{{studentId}}/guardians",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students",
+                "{{studentId}}",
+                "guardians"
+              ]
+            },
+            "description": "Primary contact first. Also included in GET /students/:id."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Change relationship / primary contact",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/students/{{studentId}}/guardians/{{guardianId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students",
+                "{{studentId}}",
+                "guardians",
+                "{{guardianId}}"
+              ]
+            },
+            "description": "Making a guardian primary moves the flag from the student's other guardian.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isPrimaryContact\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update guardian contact",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/guardians/{{guardianId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "guardians",
+                "{{guardianId}}"
+              ]
+            },
+            "description": "Applies to every child of this guardian.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"097 111 2222\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unlink guardian from student",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/students/{{studentId}}/guardians/{{guardianId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students",
+                "{{studentId}}",
+                "guardians",
+                "{{guardianId}}"
+              ]
+            },
+            "description": "The guardian record is kept; if they were primary, the student's next guardian becomes primary."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Enrollments",
       "description": "Permissions: `LIST_ENROLLMENTS`, `VIEW_ENROLLMENT`, `CREATE_ENROLLMENT`, `UPDATE_ENROLLMENT`, `DELETE_ENROLLMENT`. Capacity is enforced under a row lock, so simultaneous requests can never overfill a class. Enrollments in a COMPLETED year are locked.",
       "item": [

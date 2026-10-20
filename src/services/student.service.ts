@@ -3,6 +3,7 @@ import { STUDENT_AGE_RANGE } from '../constants/school-levels';
 import { Gender, Prisma, StudentStatus } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
 import { audit, scalars } from './audit.service';
+import { studentGuardiansInclude } from './guardian.service';
 import { getSchoolLevel } from './school-settings.service';
 
 export interface CreateStudentInput {
@@ -112,6 +113,7 @@ export async function getStudent(id: string) {
     where: { id },
     include: {
       ...summary,
+      guardians: studentGuardiansInclude,
       enrollments: {
         include: {
           academicYear: { select: { id: true, name: true, status: true } },

@@ -56,6 +56,16 @@ enum EnrollmentType {
   REPEATING
 }
 
+// How a guardian is related to a student
+enum GuardianRelationship {
+  FATHER // ឪពុក
+  MOTHER // ម្តាយ
+  GRANDPARENT // ជីដូន ជីតា
+  SIBLING // បងប្អូន
+  UNCLE_AUNT // ពូ មីង
+  OTHER // អាណាព្យាបាលផ្សេងទៀត
+}
+
 // MoEYS mention (និទ្ទេស) for a period's result
 enum Mention {
   A // ល្អប្រសើរ (Excellent)
@@ -230,11 +240,50 @@ model StudentProfile {
   enrollments       YearlyEnrollment[]
   attendanceRecords AttendanceRecord[]
   leaveRequests     LeaveRequest[]
+  guardians         StudentGuardian[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("student_profiles")
+}
+
+// A parent or guardian (អាណាព្យាបាល). One record per person, linked to each of their children through
+// StudentGuardian, so siblings share it and a phone number change is made once.
+model Guardian {
+  id             String  @id @default(uuid())
+  khmerName      String  @map("khmer_name")
+  latinName      String  @map("latin_name")
+  phone          String? // normalised, e.g. "012345678"
+  telegramHandle String? @map("telegram_handle")
+  occupation     String? // មុខរបរ, e.g. "Farmer"
+  address        String?
+
+  // Relations
+  students StudentGuardian[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([phone])
+  @@map("guardians")
+}
+
+// Which guardians a student has and how they are related. At most one is the primary contact (the person the
+// school calls first); the service keeps that rule.
+model StudentGuardian {
+  studentId        String               @map("student_id")
+  guardianId       String               @map("guardian_id")
+  relationship     GuardianRelationship
+  isPrimaryContact Boolean              @default(false) @map("is_primary_contact")
+  createdAt        DateTime             @default(now()) @map("created_at")
+
+  student  StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  guardian Guardian       @relation(fields: [guardianId], references: [id], onDelete: Cascade)
+
+  @@id([studentId, guardianId])
+  @@index([guardianId])
+  @@map("student_guardians")
 }
 
 // ==========================================

@@ -187,6 +187,20 @@ const ERROR_DEFS = {
   ),
   STUDENT_HAS_LOGIN: def(409, (studentIdentifier: string) => `Student ${studentIdentifier} has a login account; remove it first`),
 
+  // ── Guardians ───────────────────────────────────────────
+  GUARDIAN_NOT_FOUND: def(404, 'Guardian not found'),
+  GUARDIAN_INPUT_REQUIRED: def(400, 'Send guardianId to link an existing guardian, or guardian { khmerName, latinName, … } to add a new one', {
+    code: 'VALIDATION_ERROR',
+    details: fieldDetails('guardian'),
+  }),
+  GUARDIAN_INPUT_AMBIGUOUS: def(400, 'Send guardianId or guardian, not both', { code: 'VALIDATION_ERROR', details: fieldDetails('guardian') }),
+  GUARDIAN_ALREADY_LINKED: def(409, (guardianName: string, studentIdentifier: string) => `${guardianName} is already a guardian of student ${studentIdentifier}`),
+  GUARDIAN_NOT_LINKED: def(404, (guardianName: string, studentIdentifier: string) => `${guardianName} is not a guardian of student ${studentIdentifier}`),
+  TOO_MANY_GUARDIANS: def(409, (max: number) => `A student can have at most ${max} guardians`),
+  GUARDIAN_HAS_STUDENTS: def(409, (guardianName: string, students: number) => `${guardianName} is the guardian of ${students} student(s); unlink them first`, {
+    details: (_g: string, students: number) => ({ students }),
+  }),
+
   // ── Enrollments ─────────────────────────────────────────
   ENROLLMENT_NOT_FOUND: def(404, 'Enrollment not found'),
   CLASS_CAPACITY_REACHED: def(400, 'Class capacity reached.', {

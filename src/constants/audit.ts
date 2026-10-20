@@ -14,7 +14,9 @@ export const AUDIT_ACTIONS = {
   ],
   Role: ['ROLE_CREATED', 'ROLE_UPDATED', 'ROLE_PERMISSIONS_CHANGED', 'ROLE_DELETED'],
   Enrollment: ['ENROLLMENT_CREATED', 'ENROLLMENT_TRANSFERRED', 'ENROLLMENT_DELETED'],
-  Student: ['STUDENT_CREATED', 'STUDENT_UPDATED', 'STUDENT_DELETED'],
+  // GUARDIAN_*: a guardian linked to / unlinked from the student, or the link changed (relationship, primary contact)
+  Student: ['STUDENT_CREATED', 'STUDENT_UPDATED', 'STUDENT_DELETED', 'GUARDIAN_LINKED', 'GUARDIAN_LINK_UPDATED', 'GUARDIAN_UNLINKED'],
+  Guardian: ['GUARDIAN_CREATED', 'GUARDIAN_UPDATED', 'GUARDIAN_DELETED'],
   Staff: ['STAFF_CREATED', 'STAFF_UPDATED', 'STAFF_DELETED'],
   // CLASS_PROMOTED: end-of-year promotion of the class (after = counts and targets; each enrollment is audited too)
   ClassSection: ['CLASS_SECTION_CREATED', 'CLASS_SECTION_UPDATED', 'CLASS_SECTION_DELETED', 'HOMEROOM_ASSIGNED', 'CLASS_PROMOTED', 'RESULTS_CALCULATED'],

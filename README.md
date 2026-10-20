@@ -213,7 +213,8 @@ All routes are prefixed with `/api/v1`. Except for `/health` and `/auth/login`, 
 | Users | `GET /users`, `GET /users/:id`, `POST /users`, `PUT /users/:id/roles`, `PATCH /users/:id/status`, `POST /users/:id/reset-password`, `DELETE /users/:id` |
 | Roles | `GET /roles`, `GET /roles/:id` |
 | Staff | CRUD on `/staff`, plus `POST /staff/assign-homeroom` |
-| Students | CRUD on `/students` |
+| Students | CRUD on `/students`, plus `GET/POST /students/:id/guardians` and `PATCH/DELETE /students/:id/guardians/:guardianId` |
+| Guardians | CRUD on `/guardians` (`GET /guardians?search=` matches names and phone numbers) |
 | Academic years | CRUD on `/academic-years` |
 | Grades | CRUD on `/grades` |
 | Subjects | CRUD on `/subjects`, plus `POST /subjects/:id/grades` and `DELETE /subjects/:id/grades/:gradeId` |
@@ -234,6 +235,27 @@ These endpoints always use the signed-in login's own profile, never an id from t
 - `GET /me/homeroom` (`VIEW_OWN_HOMEROOM`): the roster of the class the signed-in teacher is homeroom teacher of, in the same format as `GET /class-sections/:id/roster`.
   - Defaults to the ACTIVE academic year. Pass `?academicYear=2025-2026` for another year.
   - Returns `404 NO_HOMEROOM_CLASS` if they have no homeroom class that year.
+
+### Guardians
+
+A guardian (អាណាព្យាបាល) is stored once and linked to each of their children, so siblings share the record, and a new phone number is entered once.
+- **Relationship:** each link stores how the guardian is related to that student: `FATHER`, `MOTHER`, `GRANDPARENT`, `SIBLING`, `UNCLE_AUNT` or `OTHER`.
+- **Primary contact:** each link also says whether this guardian is that student's primary contact. There is exactly one per student: the first guardian added becomes primary, making another primary moves the flag, and unlinking the primary passes it on to the next guardian.
+
+```jsonc
+// Add a new guardian to a student
+POST /students/:id/guardians
+{ "relationship": "MOTHER", "guardian": { "khmerName": "សុខ ចាន់ធី", "latinName": "Sok Chanthy", "phone": "012 345 678", "occupation": "កសិករ" } }
+
+// Link an existing guardian (e.g. found with GET /guardians?search=012345) to a sibling
+POST /students/:id/guardians
+{ "relationship": "MOTHER", "guardianId": "…", "isPrimaryContact": true }
+```
+
+- **Phone numbers** are normalised to the local format (`+855 12 345 678` → `012345678`).
+- **Access:** guardians appear in `GET /students/:id`, and students see their own through `/me/profile`. Anyone with `VIEW_STUDENT` can read them, which includes teachers, so they can contact families. Managing them needs `UPDATE_STUDENT`.
+- **Deleting:** a guardian can only be deleted once no student is linked to them.
+- **Audit:** every change is recorded in the audit log.
 
 ### End-of-year promotion
 
