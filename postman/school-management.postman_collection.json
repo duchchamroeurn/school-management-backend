@@ -1887,6 +1887,96 @@
               }
             }
           ]
+        },
+        {
+          "name": "Promote class (dry run)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"promotedClassSectionId\": \"{{nextYearClassSectionId}}\",\n  \"repeatingClassSectionId\": \"{{nextYearRepeatClassSectionId}}\",\n  \"repeatingStudentIds\": [],\n  \"excludedStudentIds\": [],\n  \"dryRun\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/class-sections/{{classSectionId}}/promote",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "class-sections",
+                "{{classSectionId}}",
+                "promote"
+              ]
+            },
+            "description": "End-of-year promotion preview: who would be PROMOTED, REPEATING, GRADUATED (top grade) or skipped. Changes nothing. Needs CREATE_ENROLLMENT + UPDATE_STUDENT."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('is a dry run', () => pm.expect(pm.response.json().data.dryRun).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Promote class",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"promotedClassSectionId\": \"{{nextYearClassSectionId}}\",\n  \"repeatingClassSectionId\": \"{{nextYearRepeatClassSectionId}}\",\n  \"repeatingStudentIds\": [],\n  \"excludedStudentIds\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/class-sections/{{classSectionId}}/promote",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "class-sections",
+                "{{classSectionId}}",
+                "promote"
+              ]
+            },
+            "description": "Moves the whole class into the next year in one transaction (all-or-nothing). Students already enrolled in the target year are skipped, so it is safe to run again."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('has summary', () => pm.expect(pm.response.json().data.summary).to.have.property('promoted'));"
+                ]
+              }
+            }
+          ]
         }
       ]
     },

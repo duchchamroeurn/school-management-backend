@@ -126,43 +126,53 @@ export async function enrollStudentInClass(studentId: string, classSectionId: st
 
 /**
  * Enrolls a returning student (one with an enrollment in an earlier academic year) as PROMOTED or
- * REPEATING. Same capacity lock as new admissions. Not exposed via the API yet — used by the demo
- * seed and intended for the future end-of-year promotion feature.
+ * REPEATING. Same capacity lock as new admissions. Used by end-of-year class promotion and the demo seed.
  */
 export async function enrollContinuingStudent(
   studentId: string,
   classSectionId: string,
   academicYearId: string,
-  enrollmentType: typeof EnrollmentType.PROMOTED | typeof EnrollmentType.REPEATING,
+  enrollmentType: ContinuingType,
 ) {
   try {
-    return await prisma.$transaction(async (tx) => {
-      const classSection = await lockClassSection(tx, classSectionId);
-      if (classSection.academicYearId !== academicYearId) {
-        throw Errors.CLASS_IN_OTHER_YEAR(`${classSection.grade.gradeNumber}${classSection.sectionName}`, classSection.academicYear.name);
-      }
-
-      const student = await tx.studentProfile.findUnique({
-        where: { id: studentId },
-        include: { enrollments: { include: { academicYear: true } } },
-      });
-      if (!student) throw Errors.STUDENT_NOT_FOUND();
-      if (student.status !== StudentStatus.ENROLLED) {
-        throw Errors.STUDENT_NOT_ACTIVE(student.studentIdentifier, student.status);
-      }
-      if (student.enrollments.some((e) => e.academicYearId === academicYearId)) {
-        throw Errors.ALREADY_ENROLLED(student.studentIdentifier, classSection.academicYear.name);
-      }
-      if (!student.enrollments.some((e) => e.academicYear.startDate < classSection.academicYear.startDate)) {
-        throw Errors.NO_PREVIOUS_ENROLLMENT(student.studentIdentifier);
-      }
-
-      await assertSeatAvailable(tx, classSection);
-      return createAudited(tx, { studentId, classSectionId, academicYearId, enrollmentType });
-    });
+    return await prisma.$transaction((tx) => enrollContinuingIn(tx, studentId, classSectionId, academicYearId, enrollmentType));
   } catch (err) {
     throw alreadyEnrolled(err);
   }
+}
+
+type ContinuingType = typeof EnrollmentType.PROMOTED | typeof EnrollmentType.REPEATING;
+
+// The checks and write of enrollContinuingStudent, inside the caller's transaction (so a whole class can be moved at once)
+export async function enrollContinuingIn(
+  tx: Prisma.TransactionClient,
+  studentId: string,
+  classSectionId: string,
+  academicYearId: string,
+  enrollmentType: ContinuingType,
+) {
+  const classSection = await lockClassSection(tx, classSectionId);
+  if (classSection.academicYearId !== academicYearId) {
+    throw Errors.CLASS_IN_OTHER_YEAR(`${classSection.grade.gradeNumber}${classSection.sectionName}`, classSection.academicYear.name);
+  }
+
+  const student = await tx.studentProfile.findUnique({
+    where: { id: studentId },
+    include: { enrollments: { include: { academicYear: true } } },
+  });
+  if (!student) throw Errors.STUDENT_NOT_FOUND();
+  if (student.status !== StudentStatus.ENROLLED) {
+    throw Errors.STUDENT_NOT_ACTIVE(student.studentIdentifier, student.status);
+  }
+  if (student.enrollments.some((e) => e.academicYearId === academicYearId)) {
+    throw Errors.ALREADY_ENROLLED(student.studentIdentifier, classSection.academicYear.name);
+  }
+  if (!student.enrollments.some((e) => e.academicYear.startDate < classSection.academicYear.startDate)) {
+    throw Errors.NO_PREVIOUS_ENROLLMENT(student.studentIdentifier);
+  }
+
+  await assertSeatAvailable(tx, classSection);
+  return createAudited(tx, { studentId, classSectionId, academicYearId, enrollmentType });
 }
 
 export async function listEnrollments(filter: ListEnrollmentsFilter) {

@@ -216,7 +216,7 @@ All routes are prefixed with `/api/v1`. Except for `/health` and `/auth/login`, 
 | Academic years | CRUD on `/academic-years` |
 | Grades | CRUD on `/grades` |
 | Subjects | CRUD on `/subjects`, plus `POST /subjects/:id/grades` and `DELETE /subjects/:id/grades/:gradeId` |
-| Class sections | CRUD on `/class-sections`, plus `GET /class-sections/:id/roster` |
+| Class sections | CRUD on `/class-sections`, plus `GET /class-sections/:id/roster` and `POST /class-sections/:id/promote` |
 | Subject teachers | `GET /assignments/class/:classSectionId`, plus CRUD on `/assignments/subject-teacher` (`PATCH` takes `{ staffId }` to hand the subject to another teacher) |
 | Enrollments | CRUD on `/enrollments` |
 
@@ -233,6 +233,28 @@ These endpoints always use the signed-in login's own profile, never an id from t
 - `GET /me/homeroom` (`VIEW_OWN_HOMEROOM`): the roster of the class the signed-in teacher is homeroom teacher of, in the same format as `GET /class-sections/:id/roster`.
   - Defaults to the ACTIVE academic year. Pass `?academicYear=2025-2026` for another year.
   - Returns `404 NO_HOMEROOM_CLASS` if they have no homeroom class that year.
+
+### End-of-year promotion
+
+`POST /class-sections/:id/promote` moves a whole class into the next academic year. It needs `CREATE_ENROLLMENT` and `UPDATE_STUDENT`, which Registrar, Principal and System Admin hold.
+
+```jsonc
+{
+  "promotedClassSectionId": "…",   // a class in the next grade, in the next year
+  "repeatingClassSectionId": "…",  // a class in the same grade, in the next year (needed if anyone repeats)
+  "repeatingStudentIds": ["…"],    // these students are enrolled as REPEATING
+  "excludedStudentIds": ["…"],     // these students are left alone (e.g. moving school)
+  "dryRun": true                   // check everything and show the result, but change nothing
+}
+```
+
+- **Who moves:** every active student in the class is enrolled as `PROMOTED`, except those listed as repeating or excluded.
+- **Skipped automatically:** students who dropped out or already graduated, and students already enrolled in the target year, for example placed by hand. They're listed under `skipped`.
+- **Top grade:** the school's top grade has no next grade, so promoted students are marked `GRADUATED` instead, and `promotedClassSectionId` isn't sent. That's grade 9 for a lower-secondary school and grade 12 otherwise.
+- **All or nothing:** the whole class moves in one transaction. If any student can't be placed, for example because a target class is full, nothing changes. Each student goes through the same checks as a single enrollment, including capacity.
+- **Splitting a class:** to divide a class across two target classes, run it twice and exclude a different half of the students each time.
+- **Dry run:** use `dryRun: true` to preview the result first; it returns `200`. A real run returns `201`.
+- **Audit:** each new enrollment and graduation is audited, plus one `CLASS_PROMOTED` entry for the class with the counts.
 
 ### Entering scores
 

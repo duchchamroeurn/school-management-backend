@@ -206,6 +206,43 @@ const ERROR_DEFS = {
   NO_PREVIOUS_ENROLLMENT: def(409, (studentIdentifier: string) => `Student ${studentIdentifier} has no earlier enrollment; use NEW_ADMISSION`),
   SAME_CLASS_SECTION: def(400, 'Student is already in this class section'),
 
+  // ── End-of-year promotion ───────────────────────────────
+  PROMOTION_YEAR_NOT_STARTED: def(409, (className: string, yearName: string) => `Class ${className} is in ${yearName}, which hasn't started; there is nothing to promote yet`),
+  STUDENT_IN_BOTH_LISTS: def(400, 'A student cannot be both repeating and excluded', {
+    code: 'VALIDATION_ERROR',
+    details: (studentIds: string[]) => ({ field: 'repeatingStudentIds', studentIds }),
+  }),
+  // STUDENTS_NOT_IN_CLASS (shared with attendance) is defined below
+  PROMOTED_CLASS_NOT_ALLOWED: def(
+    400,
+    (gradeNumber: number) => `Grade ${gradeNumber} is this school's top grade: promoted students graduate, so don't send promotedClassSectionId`,
+    { code: 'VALIDATION_ERROR', details: () => ({ field: 'promotedClassSectionId' }) },
+  ),
+  PROMOTED_CLASS_REQUIRED: def(400, (count: number, nextGrade: number) => `${count} student(s) are promoted: send promotedClassSectionId, a grade ${nextGrade} class`, {
+    code: 'VALIDATION_ERROR',
+    details: () => ({ field: 'promotedClassSectionId' }),
+  }),
+  REPEATING_CLASS_REQUIRED: def(400, (count: number, gradeNumber: number) => `${count} student(s) repeat: send repeatingClassSectionId, a grade ${gradeNumber} class`, {
+    code: 'VALIDATION_ERROR',
+    details: () => ({ field: 'repeatingClassSectionId' }),
+  }),
+  TARGET_CLASS_WRONG_GRADE: def(
+    400,
+    (role: 'promoted' | 'repeating', className: string, expectedGrade: number) =>
+      `The ${role} class must be in grade ${expectedGrade}, but ${className} is not`,
+    { code: 'VALIDATION_ERROR', details: (role: 'promoted' | 'repeating') => ({ field: `${role}ClassSectionId` }) },
+  ),
+  TARGET_YEAR_NOT_LATER: def(
+    400,
+    (className: string, targetYear: string, sourceYear: string) => `Class ${className} is in ${targetYear}; students can only move to a year after ${sourceYear}`,
+    { code: 'VALIDATION_ERROR' },
+  ),
+  TARGET_CLASSES_DIFFERENT_YEARS: def(
+    400,
+    (promotedYear: string, repeatingYear: string) => `The promoted class is in ${promotedYear} but the repeating class is in ${repeatingYear}; use classes of the same year`,
+    { code: 'VALIDATION_ERROR' },
+  ),
+
   // ── Staff ───────────────────────────────────────────────
   STAFF_NOT_FOUND: def(404, 'Staff member not found'),
   DUPLICATE_STAFF: def(
