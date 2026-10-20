@@ -2507,6 +2507,79 @@
       ]
     },
     {
+      "name": "Audit Log",
+      "description": "Who changed what, and when. Read-only. Needs `LIST_AUDIT_LOGS` (System Admin, Principal).",
+      "item": [
+        {
+          "name": "List audit log",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/audit-logs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "audit-logs"
+              ],
+              "query": [
+                {
+                  "key": "entityType",
+                  "value": "Enrollment",
+                  "disabled": true,
+                  "description": "User, Role, Enrollment, Student, Staff, ClassSection, AcademicYear, Grade, Subject, SchoolSettings"
+                },
+                {
+                  "key": "entityId",
+                  "value": "{{enrollmentId}}",
+                  "disabled": true,
+                  "description": "Full history of one record"
+                },
+                {
+                  "key": "action",
+                  "value": "ENROLLMENT_TRANSFERRED",
+                  "disabled": true,
+                  "description": "See src/constants/audit.ts"
+                },
+                {
+                  "key": "actorUserId",
+                  "value": "{{userId}}",
+                  "disabled": true,
+                  "description": "Everything one user did"
+                },
+                {
+                  "key": "from",
+                  "value": "2026-10-01",
+                  "disabled": true,
+                  "description": "YYYY-MM-DD, inclusive"
+                },
+                {
+                  "key": "to",
+                  "value": "2026-10-31",
+                  "disabled": true,
+                  "description": "YYYY-MM-DD, inclusive"
+                }
+              ]
+            },
+            "description": "Newest first, paginated (page, pageSize). Enable query params to filter. Updates store only the changed fields in before/after; password hashes and temporary passwords are never stored."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('is a list', () => pm.expect(pm.response.json().data).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Delete",
       "description": "Deletes run last so the requests above have data to work with. Records still in use return 409.",
       "item": [

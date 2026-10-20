@@ -1,5 +1,6 @@
 import { Errors } from '../constants/errors';
 import { prisma } from '../lib/prisma';
+import { audit } from './audit.service';
 import { signAccessToken } from '../utils/jwt';
 import { assertLoginAllowed, recordLoginFailure, recordLoginSuccess } from '../utils/loginThrottle';
 import { checkPasswordPolicy, DUMMY_HASH, hashPassword, verifyPassword } from '../utils/password';
@@ -32,16 +33,28 @@ export async function login(username: string, password: string, clientIp: string
   // Always run bcrypt (against a dummy hash for unknown users) so timing doesn't reveal which usernames exist.
   // The password is checked before the status so a wrong guess can't discover that an account is suspended.
   const passwordOk = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH);
+  // The attempted username is recorded even when no such login exists
+  const loginEvent = { entityType: 'User', entityId: user?.id ?? null, entityLabel: username } as const;
   if (!user || !passwordOk) {
-    recordLoginFailure(clientIp, username);
+    await audit(prisma, { ...loginEvent, action: 'LOGIN_FAILED', after: { reason: 'INVALID_CREDENTIALS' } });
+    try {
+      recordLoginFailure(clientIp, username);
+    } catch (err) {
+      await audit(prisma, { ...loginEvent, action: 'ACCOUNT_LOCKED' });
+      throw err;
+    }
     throw Errors.INVALID_CREDENTIALS();
   }
   recordLoginSuccess(username);
   if (user.status !== 'ACTIVE') {
+    await audit(prisma, { ...loginEvent, action: 'LOGIN_FAILED', after: { reason: 'ACCOUNT_SUSPENDED' } });
     throw Errors.ACCOUNT_SUSPENDED();
   }
 
-  await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+    await audit(tx, { ...loginEvent, action: 'LOGIN_SUCCEEDED', actor: { id: user.id, username: user.username } });
+  });
 
   return {
     accessToken: signAccessToken(user.id),
@@ -72,9 +85,13 @@ export async function changePassword(userId: string, currentPassword: string, ne
 
   // Truncate to whole seconds so tokens issued right after this (same-second iat) remain valid
   const changedAt = new Date(Math.floor(Date.now() / 1000) * 1000);
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { passwordHash: await hashPassword(newPassword), mustChangePassword: false, passwordChangedAt: changedAt },
+  const passwordHash = await hashPassword(newPassword);
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: user.id },
+      data: { passwordHash, mustChangePassword: false, passwordChangedAt: changedAt },
+    });
+    await audit(tx, { entityType: 'User', action: 'PASSWORD_CHANGED', entityId: user.id, entityLabel: user.username });
   });
 
   // Older tokens are now rejected, so hand back a fresh one

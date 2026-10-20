@@ -1,12 +1,38 @@
 import { Errors } from '../constants/errors';
 import { AcademicYearStatus, EnrollmentType, Prisma, StudentStatus } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
+import { audit } from './audit.service';
 
 const details = {
   student: { select: { id: true, studentIdentifier: true, khmerName: true, latinName: true, gender: true, status: true } },
   classSection: { select: { id: true, sectionName: true, maxCapacity: true, grade: { select: { id: true, gradeNumber: true } } } },
   academicYear: { select: { id: true, name: true, status: true } },
 } as const;
+
+type EnrollmentWithDetails = Prisma.YearlyEnrollmentGetPayload<{ include: typeof details }>;
+
+// Ids plus readable names, so an entry still makes sense after the student or class is gone
+const auditSnapshot = (e: EnrollmentWithDetails) => ({
+  studentId: e.student.id,
+  student: `${e.student.studentIdentifier} ${e.student.latinName}`,
+  classSectionId: e.classSection.id,
+  classSection: `${e.classSection.grade.gradeNumber}${e.classSection.sectionName}`,
+  academicYear: e.academicYear.name,
+  enrollmentType: e.enrollmentType,
+});
+
+const auditEnrollment = (e: EnrollmentWithDetails) =>
+  ({
+    entityType: 'Enrollment',
+    entityId: e.id,
+    entityLabel: `${e.student.studentIdentifier} ${e.student.latinName} — ${e.academicYear.name}`,
+  }) as const;
+
+async function createAudited(tx: Prisma.TransactionClient, data: Prisma.YearlyEnrollmentUncheckedCreateInput) {
+  const created = await tx.yearlyEnrollment.create({ data, include: details });
+  await audit(tx, { ...auditEnrollment(created), action: 'ENROLLMENT_CREATED', after: auditSnapshot(created) });
+  return created;
+}
 
 export interface ListEnrollmentsFilter {
   academicYearId?: string;
@@ -90,10 +116,7 @@ export async function enrollStudentInClass(studentId: string, classSectionId: st
 
       await assertSeatAvailable(tx, classSection);
 
-      return tx.yearlyEnrollment.create({
-        data: { studentId, classSectionId, academicYearId, enrollmentType: EnrollmentType.NEW_ADMISSION },
-        include: details,
-      });
+      return createAudited(tx, { studentId, classSectionId, academicYearId, enrollmentType: EnrollmentType.NEW_ADMISSION });
     });
   } catch (err) {
     // The same student enrolled by two requests at once: the (studentId, academicYearId) unique constraint catches it
@@ -135,10 +158,7 @@ export async function enrollContinuingStudent(
       }
 
       await assertSeatAvailable(tx, classSection);
-      return tx.yearlyEnrollment.create({
-        data: { studentId, classSectionId, academicYearId, enrollmentType },
-        include: details,
-      });
+      return createAudited(tx, { studentId, classSectionId, academicYearId, enrollmentType });
     });
   } catch (err) {
     throw alreadyEnrolled(err);
@@ -181,7 +201,7 @@ export async function getEnrollment(id: string) {
  */
 export async function transferEnrollment(id: string, targetClassSectionId: string) {
   return prisma.$transaction(async (tx) => {
-    const enrollment = await tx.yearlyEnrollment.findUnique({ where: { id }, include: { academicYear: true, student: true } });
+    const enrollment = await tx.yearlyEnrollment.findUnique({ where: { id }, include: { ...details, academicYear: true, student: true } });
     if (!enrollment) throw Errors.ENROLLMENT_NOT_FOUND();
     if (enrollment.academicYear.status === AcademicYearStatus.COMPLETED) throw yearClosed(enrollment.academicYear.name);
     if (enrollment.classSectionId === targetClassSectionId) {
@@ -195,16 +215,21 @@ export async function transferEnrollment(id: string, targetClassSectionId: strin
     // A dropped-out/graduated student doesn't occupy a seat, so moving their record doesn't need one
     if (enrollment.student.status === StudentStatus.ENROLLED) await assertSeatAvailable(tx, target);
 
-    return tx.yearlyEnrollment.update({ where: { id }, data: { classSectionId: target.id }, include: details });
+    const updated = await tx.yearlyEnrollment.update({ where: { id }, data: { classSectionId: target.id }, include: details });
+    await audit(tx, { ...auditEnrollment(updated), action: 'ENROLLMENT_TRANSFERRED', before: auditSnapshot(enrollment), after: auditSnapshot(updated) });
+    return updated;
   });
 }
 
 // For enrollments made by mistake. Students who leave keep their enrollment and get status DROPPED_OUT.
 export async function deleteEnrollment(id: string) {
-  const enrollment = await prisma.yearlyEnrollment.findUnique({ where: { id }, include: { academicYear: true } });
+  const enrollment = await prisma.yearlyEnrollment.findUnique({ where: { id }, include: details });
   if (!enrollment) throw Errors.ENROLLMENT_NOT_FOUND();
   if (enrollment.academicYear.status === AcademicYearStatus.COMPLETED) throw yearClosed(enrollment.academicYear.name);
-  await prisma.yearlyEnrollment.delete({ where: { id } });
+  await prisma.$transaction(async (tx) => {
+    await tx.yearlyEnrollment.delete({ where: { id } });
+    await audit(tx, { ...auditEnrollment(enrollment), action: 'ENROLLMENT_DELETED', before: auditSnapshot(enrollment) });
+  });
 }
 
 // Class list (បញ្ជីឈ្មោះសិស្ស) sorted by Khmer name, with seat usage

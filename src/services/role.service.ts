@@ -2,6 +2,7 @@ import { Errors } from '../constants/errors';
 import { PERMISSION_DEFINITIONS } from '../constants/permissions';
 import { Prisma } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
+import { audit } from './audit.service';
 
 // Permissions are defined in code (each one is enforced by a route), so roles are built from this catalogue.
 // Custom roles can be created and edited freely; system roles (isSystemDefault) are owned by the seed.
@@ -25,6 +26,14 @@ const toDto = ({ rolePermissions, ...role }: RoleWithPermissions) => ({
   ...role,
   permissions: rolePermissions.map((rp) => rp.permission),
 });
+
+const auditSnapshot = (role: RoleWithPermissions) => ({
+  khmerName: role.khmerName,
+  latinName: role.latinName,
+  permissions: role.rolePermissions.map((rp) => rp.permission.code).sort(),
+});
+
+const auditRole = (role: RoleWithPermissions) => ({ entityType: 'Role', entityId: role.id, entityLabel: role.latinName }) as const;
 
 
 /**
@@ -102,7 +111,7 @@ export async function createRole(actorPermissions: string[] | undefined, data: C
     const role = await prisma.$transaction(async (tx) => {
       await assertNameFree(tx, data.latinName);
       const ids = await permissionIds(tx, codes);
-      return tx.role.create({
+      const created = await tx.role.create({
         data: {
           khmerName: data.khmerName,
           latinName: data.latinName,
@@ -111,6 +120,8 @@ export async function createRole(actorPermissions: string[] | undefined, data: C
         },
         include: roleDetails,
       });
+      await audit(tx, { ...auditRole(created), action: 'ROLE_CREATED', after: auditSnapshot(created) });
+      return created;
     });
     return toDto(role);
   } catch (err) {
@@ -123,10 +134,13 @@ export async function createRole(actorPermissions: string[] | undefined, data: C
 
 export async function updateRole(id: string, data: UpdateRoleInput) {
   const role = await prisma.$transaction(async (tx) => {
-    assertCustom(await loadRole(tx, id));
+    const current = await loadRole(tx, id);
+    assertCustom(current);
     if (data.latinName) await assertNameFree(tx, data.latinName, id);
     await tx.role.update({ where: { id }, data });
-    return loadRole(tx, id);
+    const updated = await loadRole(tx, id);
+    await audit(tx, { ...auditRole(updated), action: 'ROLE_UPDATED', before: auditSnapshot(current), after: auditSnapshot(updated) });
+    return updated;
   });
   return toDto(role);
 }
@@ -138,11 +152,14 @@ export async function setRolePermissions(actorPermissions: string[] | undefined,
   assertCanGrant(actorPermissions, codes);
 
   const role = await prisma.$transaction(async (tx) => {
-    assertCustom(await loadRole(tx, id));
+    const current = await loadRole(tx, id);
+    assertCustom(current);
     const ids = await permissionIds(tx, codes);
     await tx.rolePermission.deleteMany({ where: { roleId: id, permissionId: { notIn: ids } } });
     await tx.rolePermission.createMany({ data: ids.map((permissionId) => ({ roleId: id, permissionId })), skipDuplicates: true });
-    return loadRole(tx, id);
+    const updated = await loadRole(tx, id);
+    await audit(tx, { ...auditRole(updated), action: 'ROLE_PERMISSIONS_CHANGED', before: auditSnapshot(current), after: auditSnapshot(updated) });
+    return updated;
   });
   return toDto(role);
 }
@@ -156,5 +173,6 @@ export async function deleteRole(id: string) {
     }
     // role_permissions rows cascade
     await tx.role.delete({ where: { id } });
+    await audit(tx, { ...auditRole(role), action: 'ROLE_DELETED', before: auditSnapshot(role) });
   });
 }

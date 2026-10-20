@@ -311,3 +311,31 @@ model YearlyEnrollment {
   @@index([classSectionId])
   @@map("yearly_enrollments")
 }
+
+// ==========================================
+// 6. AUDIT LOG (append-only: the API never updates or deletes rows)
+// ==========================================
+
+// Who changed what, and when. Deliberately has no foreign keys: actor and entity are copied
+// (id + readable label) so the record survives deleting the login or the changed record.
+model AuditLog {
+  id            String   @id @default(uuid())
+  createdAt     DateTime @default(now()) @map("created_at")
+  action        String // e.g. ENROLLMENT_TRANSFERRED — see src/constants/audit.ts
+  entityType    String   @map("entity_type") // e.g. Enrollment
+  entityId      String?  @map("entity_id") // null e.g. for a failed login with an unknown username
+  entityLabel   String?  @map("entity_label") // e.g. "STU-26-0001 Sok Dara — 2026-2027"
+  // null actor = seed/import script, or an anonymous login attempt
+  actorUserId   String?  @map("actor_user_id")
+  actorUsername String?  @map("actor_username")
+  ipAddress     String?  @map("ip_address")
+  // For updates only the fields that changed; never contains password hashes
+  before        Json?
+  after         Json?
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+  @@index([actorUserId])
+  @@index([action])
+  @@map("audit_logs")
+}

@@ -44,12 +44,15 @@ export const PERMISSIONS = {
   SELF_SERVICE: { VIEW_OWN_PROFILE: 'VIEW_OWN_PROFILE', VIEW_OWN_HOMEROOM: 'VIEW_OWN_HOMEROOM' },
   // Single-row configuration: anyone signed in may read it, only this permission may change it
   SCHOOL_SETTINGS: { UPDATE: 'UPDATE_SCHOOL_SETTINGS' },
+  // Read-only: the audit log is written by the API itself and can never be edited
+  AUDIT_LOG: { LIST: 'LIST_AUDIT_LOGS' },
 } as const;
 
 export type PermissionCode =
   | { [R in Resource]: ResourceCodes<R>[Action] }[Resource]
   | (typeof PERMISSIONS.SELF_SERVICE)[keyof typeof PERMISSIONS.SELF_SERVICE]
-  | typeof PERMISSIONS.SCHOOL_SETTINGS.UPDATE;
+  | typeof PERMISSIONS.SCHOOL_SETTINGS.UPDATE
+  | typeof PERMISSIONS.AUDIT_LOG.LIST;
 
 export interface PermissionDefinition {
   module: string;
@@ -68,6 +71,7 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   { module: 'SELF_SERVICE', code: 'VIEW_OWN_PROFILE', description: 'View own profile and enrollment' },
   { module: 'SELF_SERVICE', code: 'VIEW_OWN_HOMEROOM', description: 'View the roster of the class one is homeroom teacher of' },
   { module: 'SYSTEM', code: 'UPDATE_SCHOOL_SETTINGS', description: 'Change school name, MoEYS code and school level (grades offered)' },
+  { module: 'SYSTEM', code: 'LIST_AUDIT_LOGS', description: 'View the audit log of who changed what' },
 ];
 
 export const ALL_PERMISSION_CODES: PermissionCode[] = PERMISSION_DEFINITIONS.map((p) => p.code);

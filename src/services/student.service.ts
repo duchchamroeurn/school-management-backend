@@ -2,6 +2,7 @@ import { Errors } from '../constants/errors';
 import { STUDENT_AGE_RANGE } from '../constants/school-levels';
 import { Gender, Prisma, StudentStatus } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
+import { audit, scalars } from './audit.service';
 import { getSchoolLevel } from './school-settings.service';
 
 export interface CreateStudentInput {
@@ -30,6 +31,9 @@ const summary = {
   user: { select: { id: true, username: true, status: true } },
   _count: { select: { enrollments: true } },
 } as const;
+
+const auditStudent = (s: { id: string; studentIdentifier: string; latinName: string }) =>
+  ({ entityType: 'Student', entityId: s.id, entityLabel: `${s.studentIdentifier} ${s.latinName}` }) as const;
 
 
 const duplicateStudent = (existing: { id: string; studentIdentifier: string; khmerName: string; latinName: string; birthCertificateNo: string }) =>
@@ -140,21 +144,28 @@ export async function createStudent(data: CreateStudentInput) {
       // Serialise ID generation so simultaneous registrations can't compute the same next number.
       // The lock is released automatically when the transaction ends.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(${STUDENT_ID_LOCK})`;
-      return tx.studentProfile.create({
+      const created = await tx.studentProfile.create({
         data: { ...data, studentIdentifier: await nextStudentIdentifier(tx) },
         include: summary,
       });
+      await audit(tx, { ...auditStudent(created), action: 'STUDENT_CREATED', after: scalars(created, ['user']) });
+      return created;
     }),
   );
 }
 
 export async function updateStudent(id: string, data: UpdateStudentInput) {
-  if (!(await prisma.studentProfile.findUnique({ where: { id } }))) throw Errors.STUDENT_NOT_FOUND();
+  const current = await prisma.studentProfile.findUnique({ where: { id } });
+  if (!current) throw Errors.STUDENT_NOT_FOUND();
   if (data.dateOfBirth) await assertPlausibleBirthDate(data.dateOfBirth);
   if (data.birthCertificateNo) await assertCertificateFree(data.birthCertificateNo, id);
 
   return guardDuplicate(data.birthCertificateNo, () =>
-    prisma.studentProfile.update({ where: { id }, data, include: summary }),
+    prisma.$transaction(async (tx) => {
+      const updated = await tx.studentProfile.update({ where: { id }, data, include: summary });
+      await audit(tx, { ...auditStudent(updated), action: 'STUDENT_UPDATED', before: scalars(current, ['user']), after: scalars(updated, ['user']) });
+      return updated;
+    }),
   );
 }
 
@@ -169,5 +180,8 @@ export async function deleteStudent(id: string) {
   if (student.user) {
     throw Errors.STUDENT_HAS_LOGIN(student.studentIdentifier);
   }
-  await prisma.studentProfile.delete({ where: { id } });
+  await prisma.$transaction(async (tx) => {
+    await tx.studentProfile.delete({ where: { id } });
+    await audit(tx, { ...auditStudent(student), action: 'STUDENT_DELETED', before: scalars(student, ['user']) });
+  });
 }

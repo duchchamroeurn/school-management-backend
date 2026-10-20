@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import { Errors } from '../constants/errors';
 import { prisma } from '../lib/prisma';
+import { currentContext } from '../lib/requestContext';
 import { verifyAccessToken } from '../utils/jwt';
 
 interface AuthenticateOptions {
@@ -48,5 +49,8 @@ export const authenticate =
       roles: user.userRoles.map((ur) => ur.role.latinName),
       permissions: [...new Set(user.userRoles.flatMap((ur) => ur.role.rolePermissions.map((rp) => rp.permission.code)))],
     };
+    // Lets the audit log record who made each change
+    const context = currentContext();
+    if (context) context.actor = { id: user.id, username: user.username };
     next();
   };

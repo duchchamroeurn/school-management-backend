@@ -1,6 +1,7 @@
 import { Errors } from '../constants/errors';
 import { AcademicYearStatus, Prisma } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
+import { audit, scalars } from './audit.service';
 
 export interface AcademicYearInput {
   name: string; // e.g., "2026-2027"
@@ -10,6 +11,8 @@ export interface AcademicYearInput {
 }
 
 const withCounts = { _count: { select: { classes: true, enrollments: true } } } as const;
+
+const auditYear = (y: { id: string; name: string }) => ({ entityType: 'AcademicYear', entityId: y.id, entityLabel: y.name }) as const;
 
 
 function validateYear({ name, startDate, endDate }: Pick<AcademicYearInput, 'name' | 'startDate' | 'endDate'>) {
@@ -78,7 +81,9 @@ export function createAcademicYear(data: AcademicYearInput) {
   return serializable(async (tx) => {
     await assertNameFree(tx, data.name);
     if (data.status === AcademicYearStatus.ACTIVE) await assertNoOtherActive(tx);
-    return tx.academicYear.create({ data, include: withCounts });
+    const created = await tx.academicYear.create({ data, include: withCounts });
+    await audit(tx, { ...auditYear(created), action: 'ACADEMIC_YEAR_CREATED', after: scalars(created) });
+    return created;
   });
 }
 
@@ -100,7 +105,9 @@ export function updateAcademicYear(id: string, data: Partial<AcademicYearInput>)
       await assertNoOtherActive(tx, id);
     }
 
-    return tx.academicYear.update({ where: { id }, data: merged, include: withCounts });
+    const updated = await tx.academicYear.update({ where: { id }, data: merged, include: withCounts });
+    await audit(tx, { ...auditYear(updated), action: 'ACADEMIC_YEAR_UPDATED', before: scalars(year), after: scalars(updated) });
+    return updated;
   });
 }
 
@@ -110,5 +117,8 @@ export async function deleteAcademicYear(id: string) {
   if (year._count.classes > 0 || year._count.enrollments > 0) {
     throw Errors.ACADEMIC_YEAR_IN_USE(year.name, year._count.classes, year._count.enrollments);
   }
-  await prisma.academicYear.delete({ where: { id } });
+  await prisma.$transaction(async (tx) => {
+    await tx.academicYear.delete({ where: { id } });
+    await audit(tx, { ...auditYear(year), action: 'ACADEMIC_YEAR_DELETED', before: scalars(year) });
+  });
 }

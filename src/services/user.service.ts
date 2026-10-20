@@ -3,6 +3,7 @@ import { SYSTEM_ROLES } from '../constants/roles';
 import { Prisma, UserStatus } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
 import { checkPasswordPolicy, generateTemporaryPassword, hashPassword } from '../utils/password';
+import { audit } from './audit.service';
 import { assertCanGrant } from './role.service';
 
 export type ProfileRef = { staffId: string; studentId?: undefined } | { studentId: string; staffId?: undefined };
@@ -49,6 +50,15 @@ function toDto(user: UserWithRelations) {
   };
 }
 
+// What the audit log keeps about a login (never the password hash)
+const auditSnapshot = (user: UserWithRelations) => ({
+  username: user.username,
+  status: user.status,
+  roles: user.userRoles.map((ur) => ur.role.latinName).sort(),
+  profile: toDto(user).profile,
+});
+
+const auditUser = (user: UserWithRelations) => ({ entityType: 'User', entityId: user.id, entityLabel: user.username }) as const;
 
 // Arbitrary constant identifying the "admin safety" lock: serialises role/status/delete changes
 // so two admins can't simultaneously remove each other and leave no active System Admin.
@@ -174,7 +184,7 @@ export async function createLogin(input: CreateLoginInput, actorPermissions?: st
 
       const roles = await resolveRoles(tx, input.roleIds, profileType);
       await assertCanAssign(tx, actorPermissions, roles.map((r) => r.id));
-      return tx.user.create({
+      const created = await tx.user.create({
         data: {
           username: input.username,
           passwordHash,
@@ -184,6 +194,8 @@ export async function createLogin(input: CreateLoginInput, actorPermissions?: st
         },
         include: userInclude,
       });
+      await audit(tx, { ...auditUser(created), action: 'USER_CREATED', after: auditSnapshot(created) });
+      return created;
     });
     // The temporary password is returned only here; it is never stored or retrievable again
     return { user: toDto(user), temporaryPassword: password, mustChangePassword: true };
@@ -211,7 +223,9 @@ export async function assignRoles(actorId: string, userId: string, roleIds: stri
 
     await tx.userRole.deleteMany({ where: { userId, roleId: { notIn: roles.map((r) => r.id) } } });
     await tx.userRole.createMany({ data: roles.map((r) => ({ userId, roleId: r.id })), skipDuplicates: true });
-    return loadUser(tx, userId);
+    const updated = await loadUser(tx, userId);
+    await audit(tx, { ...auditUser(updated), action: 'USER_ROLES_CHANGED', before: auditSnapshot(current), after: auditSnapshot(updated) });
+    return updated;
   });
   return toDto(user);
 }
@@ -226,7 +240,9 @@ export async function setStatus(actorId: string, userId: string, status: UserSta
       await assertNotLastActiveAdmin(tx, current, 'suspend this account');
     }
     await tx.user.update({ where: { id: userId }, data: { status } });
-    return loadUser(tx, userId);
+    const updated = await loadUser(tx, userId);
+    await audit(tx, { ...auditUser(updated), action: 'USER_STATUS_CHANGED', before: auditSnapshot(current), after: auditSnapshot(updated) });
+    return updated;
   });
   return toDto(user);
 }
@@ -235,12 +251,18 @@ export async function setStatus(actorId: string, userId: string, status: UserSta
 export async function resetPassword(userId: string, temporaryPassword?: string) {
   await loadUser(prisma, userId);
   const password = resolvePassword(temporaryPassword);
+  const passwordHash = await hashPassword(password);
   // Whole seconds, matching JWT iat precision (see authenticate middleware)
   const changedAt = new Date(Math.floor(Date.now() / 1000) * 1000);
-  const user = await prisma.user.update({
-    where: { id: userId },
-    data: { passwordHash: await hashPassword(password), mustChangePassword: true, passwordChangedAt: changedAt },
-    include: userInclude,
+  const user = await prisma.$transaction(async (tx) => {
+    const updated = await tx.user.update({
+      where: { id: userId },
+      data: { passwordHash, mustChangePassword: true, passwordChangedAt: changedAt },
+      include: userInclude,
+    });
+    // The temporary password itself is never recorded
+    await audit(tx, { ...auditUser(updated), action: 'PASSWORD_RESET' });
+    return updated;
   });
   return { user: toDto(user), temporaryPassword: password, mustChangePassword: true };
 }
@@ -253,5 +275,6 @@ export async function deleteLogin(actorId: string, userId: string) {
     const current = await loadUser(tx, userId);
     await assertNotLastActiveAdmin(tx, current, 'delete this account');
     await tx.user.delete({ where: { id: userId } });
+    await audit(tx, { ...auditUser(current), action: 'USER_DELETED', before: auditSnapshot(current) });
   });
 }

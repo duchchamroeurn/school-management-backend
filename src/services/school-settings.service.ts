@@ -3,6 +3,7 @@ import { Errors } from '../constants/errors';
 import { educationLevelOf, GRADE_RANGE, gradesFor, isSchoolLevel, LEVEL_LABEL } from '../constants/school-levels';
 import { Prisma, SchoolLevel } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
+import { audit, scalars } from './audit.service';
 
 const SETTINGS_ID = 1;
 
@@ -117,6 +118,14 @@ export async function updateSchoolSettings(data: UpdateSchoolSettingsInput) {
     }
 
     const updated = await tx.schoolSettings.update({ where: { id: SETTINGS_ID }, data });
+    await audit(tx, {
+      entityType: 'SchoolSettings',
+      action: 'SCHOOL_SETTINGS_UPDATED',
+      entityId: String(SETTINGS_ID),
+      entityLabel: 'School settings',
+      before: { ...scalars(current), grades: gradesFor(current.level) },
+      after: { ...scalars(updated), grades: gradesFor(updated.level) },
+    });
     return { settings: withRange(updated), gradesAdded, gradesRemoved };
   });
 }

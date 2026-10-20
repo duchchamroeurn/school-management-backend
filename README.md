@@ -198,6 +198,7 @@ All routes are prefixed with `/api/v1`. Except for `/health` and `/auth/login`, 
 | Health | `GET /health` |
 | Auth | `POST /auth/login`, `POST /auth/change-password`, `GET /auth/me` |
 | Me (own data) | `GET /me/profile`, `GET /me/homeroom?academicYear=` |
+| Audit log | `GET /audit-logs` |
 | Users | `GET /users`, `GET /users/:id`, `POST /users`, `PUT /users/:id/roles`, `PATCH /users/:id/status`, `POST /users/:id/reset-password`, `DELETE /users/:id` |
 | Roles | `GET /roles`, `GET /roles/:id` |
 | Staff | CRUD on `/staff`, plus `POST /staff/assign-homeroom` |
@@ -221,6 +222,26 @@ These endpoints always use the signed-in login's own profile, never an id from t
 - `GET /me/homeroom` (`VIEW_OWN_HOMEROOM`): the roster of the class the signed-in teacher is homeroom teacher of, in the same format as `GET /class-sections/:id/roster`.
   - Defaults to the ACTIVE academic year. Pass `?academicYear=2025-2026` for another year.
   - Returns `404 NO_HOMEROOM_CLASS` if they have no homeroom class that year.
+
+### Audit log
+
+Every change made through the API is recorded in the `audit_logs` table: who did it, when, from which IP, and what changed. Logins, failed logins and account locks are recorded too. Each entry is written in the same database transaction as the change, so a change is never saved without its entry.
+
+- **What changed:** an update stores only the changed fields, as `before` and `after`. A create stores `after`, and a delete stores `before`. An update that changed nothing isn't recorded.
+- **Never stored:** password hashes and temporary passwords. `PASSWORD_RESET` and `PASSWORD_CHANGED` record only that it happened.
+- **Survives deletion:** entries copy the actor's username and a readable label for the record, such as `STU-26-0001 Sok Dara — 2026-2027`. They stay meaningful after that login or record is deleted.
+- **Scripts:** changes made by the seed and import scripts have no actor.
+- **Read-only:** no endpoint can change or delete entries. `db:reset:demo` doesn't remove them either.
+
+`GET /audit-logs` needs `LIST_AUDIT_LOGS`, which System Admin and Principal have. Results are newest first, and paginated with `page` and `pageSize`. Filters:
+
+| Query | Example |
+| --- | --- |
+| `entityType` | `User`, `Role`, `Enrollment`, `Student`, `Staff`, `ClassSection`, `AcademicYear`, `Grade`, `Subject`, `SchoolSettings` |
+| `entityId` | the id of one record, for its full history |
+| `action` | `ENROLLMENT_TRANSFERRED`, `USER_ROLES_CHANGED`, `PASSWORD_RESET`, … (all actions are listed in [`src/constants/audit.ts`](src/constants/audit.ts)) |
+| `actorUserId` | everything one user did |
+| `from`, `to` | dates (`YYYY-MM-DD`), both inclusive |
 
 ### Default roles
 

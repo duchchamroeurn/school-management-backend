@@ -2,7 +2,9 @@ import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { config } from './config/env';
+import { requestContext } from './lib/requestContext';
 import academicYearRoutes from './routes/academic-year.routes';
+import auditLogRoutes from './routes/audit-log.routes';
 import authRoutes from './routes/auth.routes';
 import classSectionRoutes from './routes/class-section.routes';
 import enrollmentRoutes from './routes/enrollment.routes';
@@ -24,6 +26,7 @@ app.use(helmet());
 // Non-browser clients (Postman, curl) are unaffected.
 app.use(cors({ origin: config.corsOrigins }));
 app.use(express.json());
+app.use(requestContext);
 
 // Health Check Route
 app.get('/api/v1/health', (req: Request, res: Response) => {
@@ -43,6 +46,7 @@ app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/roles', roleRoutes);
 app.use('/api/v1/permissions', permissionRoutes);
 app.use('/api/v1/enrollments', enrollmentRoutes);
+app.use('/api/v1/audit-logs', auditLogRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

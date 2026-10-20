@@ -1,6 +1,7 @@
 import { Errors } from '../constants/errors';
 import { AcademicYearStatus, Gender, Prisma } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
+import { audit, scalars } from './audit.service';
 import { assertTeacherFreeForYear, classSectionDetails, guardUnique } from './class-section.service';
 
 export interface StaffInput {
@@ -30,6 +31,9 @@ const summary = {
   user: { select: { id: true, username: true, status: true } },
   _count: { select: { homeroomClasses: true } },
 } as const;
+
+const auditStaff = (s: { id: string; khmerName: string; latinName: string }) =>
+  ({ entityType: 'Staff', entityId: s.id, entityLabel: `${s.latinName} (${s.khmerName})` }) as const;
 
 
 const duplicateStaff = (existing: { id: string; nationalIdNo: string; khmerName: string; latinName: string }) =>
@@ -98,14 +102,27 @@ export async function getStaff(id: string) {
 export async function createStaff(data: StaffInput) {
   assertHireDateNotInFuture(data.hireDate);
   await assertNationalIdFree(data.nationalIdNo);
-  return guardDuplicate(data.nationalIdNo, () => prisma.staffProfile.create({ data, include: summary }));
+  return guardDuplicate(data.nationalIdNo, () =>
+    prisma.$transaction(async (tx) => {
+      const created = await tx.staffProfile.create({ data, include: summary });
+      await audit(tx, { ...auditStaff(created), action: 'STAFF_CREATED', after: scalars(created, ['user']) });
+      return created;
+    }),
+  );
 }
 
 export async function updateStaff(id: string, data: Partial<StaffInput>) {
-  if (!(await prisma.staffProfile.findUnique({ where: { id } }))) throw Errors.STAFF_NOT_FOUND();
+  const current = await prisma.staffProfile.findUnique({ where: { id } });
+  if (!current) throw Errors.STAFF_NOT_FOUND();
   if (data.hireDate) assertHireDateNotInFuture(data.hireDate);
   if (data.nationalIdNo) await assertNationalIdFree(data.nationalIdNo, id);
-  return guardDuplicate(data.nationalIdNo, () => prisma.staffProfile.update({ where: { id }, data, include: summary }));
+  return guardDuplicate(data.nationalIdNo, () =>
+    prisma.$transaction(async (tx) => {
+      const updated = await tx.staffProfile.update({ where: { id }, data, include: summary });
+      await audit(tx, { ...auditStaff(updated), action: 'STAFF_UPDATED', before: scalars(current, ['user']), after: scalars(updated, ['user']) });
+      return updated;
+    }),
+  );
 }
 
 // Staff who were ever a homeroom teacher keep their record (class history); same for staff with a login.
@@ -118,7 +135,10 @@ export async function deleteStaff(id: string) {
   if (staff.user) {
     throw Errors.STAFF_HAS_LOGIN(staff.latinName);
   }
-  await prisma.staffProfile.delete({ where: { id } });
+  await prisma.$transaction(async (tx) => {
+    await tx.staffProfile.delete({ where: { id } });
+    await audit(tx, { ...auditStaff(staff), action: 'STAFF_DELETED', before: scalars(staff, ['user']) });
+  });
 }
 
 /**
@@ -160,8 +180,22 @@ export async function assignHomeroom({ staffId, classSectionId, academicYearName
   const check = () => assertTeacherFreeForYear(staff.id, academicYear.id, classSection.id);
   await check();
 
+  const teacherName = (t: { id: string; khmerName: string; latinName: string } | null) =>
+    t && { id: t.id, name: `${t.latinName} (${t.khmerName})` };
   const updated = await guardUnique(
-    () => prisma.classSection.update({ where: { id: classSectionId }, data: { homeroomTeacherId: staff.id }, include: classSectionDetails }),
+    () =>
+      prisma.$transaction(async (tx) => {
+        const result = await tx.classSection.update({ where: { id: classSectionId }, data: { homeroomTeacherId: staff.id }, include: classSectionDetails });
+        await audit(tx, {
+          entityType: 'ClassSection',
+          action: 'HOMEROOM_ASSIGNED',
+          entityId: classSection.id,
+          entityLabel: `${className} ${academicYear.name}`,
+          before: { homeroomTeacher: teacherName(previous) },
+          after: { homeroomTeacher: teacherName(staff) },
+        });
+        return result;
+      }),
     check,
   );
   return {

@@ -1,6 +1,7 @@
 import { Errors } from '../constants/errors';
 import { AcademicYearStatus, Prisma } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
+import { audit, scalars } from './audit.service';
 
 export interface CreateClassSectionInput {
   sectionName: string; // e.g., "A"
@@ -25,6 +26,16 @@ export const classSectionDetails = {
   homeroomTeacher: { select: { id: true, khmerName: true, latinName: true } },
   _count: { select: { enrollments: true } },
 } as const;
+
+type ClassSectionWithDetails = Prisma.ClassSectionGetPayload<{ include: typeof classSectionDetails }>;
+
+const auditSnapshot = (c: ClassSectionWithDetails) => ({
+  ...scalars(c),
+  homeroomTeacher: c.homeroomTeacher && `${c.homeroomTeacher.latinName} (${c.homeroomTeacher.khmerName})`,
+});
+
+const auditClassSection = (c: ClassSectionWithDetails) =>
+  ({ entityType: 'ClassSection', entityId: c.id, entityLabel: `${c.grade.gradeNumber}${c.sectionName} ${c.academicYear.name}` }) as const;
 
 
 const classSectionExists = (gradeNumber: number, sectionName: string, academicYearName: string) =>
@@ -124,15 +135,19 @@ export async function createClassSection(data: CreateClassSectionInput) {
 
   return guardUnique(
     () =>
-      prisma.classSection.create({
-        data: {
-          sectionName,
-          maxCapacity: data.maxCapacity,
-          gradeId: grade.id,
-          academicYearId: academicYear.id,
-          homeroomTeacherId: data.homeroomTeacherId ?? null,
-        },
-        include: classSectionDetails,
+      prisma.$transaction(async (tx) => {
+        const created = await tx.classSection.create({
+          data: {
+            sectionName,
+            maxCapacity: data.maxCapacity,
+            gradeId: grade.id,
+            academicYearId: academicYear.id,
+            homeroomTeacherId: data.homeroomTeacherId ?? null,
+          },
+          include: classSectionDetails,
+        });
+        await audit(tx, { ...auditClassSection(created), action: 'CLASS_SECTION_CREATED', after: auditSnapshot(created) });
+        return created;
       }),
     checks,
   );
@@ -160,10 +175,14 @@ export async function updateClassSection(id: string, data: UpdateClassSectionInp
 
   return guardUnique(
     () =>
-      prisma.classSection.update({
-        where: { id },
-        data: { sectionName, maxCapacity: data.maxCapacity, homeroomTeacherId: data.homeroomTeacherId },
-        include: classSectionDetails,
+      prisma.$transaction(async (tx) => {
+        const updated = await tx.classSection.update({
+          where: { id },
+          data: { sectionName, maxCapacity: data.maxCapacity, homeroomTeacherId: data.homeroomTeacherId },
+          include: classSectionDetails,
+        });
+        await audit(tx, { ...auditClassSection(updated), action: 'CLASS_SECTION_UPDATED', before: auditSnapshot(existing), after: auditSnapshot(updated) });
+        return updated;
       }),
     checks,
   );
@@ -175,5 +194,8 @@ export async function deleteClassSection(id: string) {
   if (existing._count.enrollments > 0) {
     throw Errors.CLASS_SECTION_IN_USE(`${existing.grade.gradeNumber}${existing.sectionName}`, existing._count.enrollments);
   }
-  await prisma.classSection.delete({ where: { id } });
+  await prisma.$transaction(async (tx) => {
+    await tx.classSection.delete({ where: { id } });
+    await audit(tx, { ...auditClassSection(existing), action: 'CLASS_SECTION_DELETED', before: auditSnapshot(existing) });
+  });
 }
