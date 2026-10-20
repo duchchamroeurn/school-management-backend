@@ -1,6 +1,8 @@
+import { STUDENT_AGE_RANGE } from '../constants/school-levels';
 import { Gender, Prisma, StudentStatus } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../utils/httpError';
+import { getSchoolLevel } from './school-settings.service';
 
 export interface CreateStudentInput {
   birthCertificateNo: string; // already normalised by the controller
@@ -23,10 +25,6 @@ export interface ListStudentsFilter {
   skip: number;
   take: number;
 }
-
-// Secondary-school age sanity range
-const MIN_AGE = 8;
-const MAX_AGE = 30;
 
 const summary = {
   user: { select: { id: true, username: true, status: true } },
@@ -62,11 +60,13 @@ async function guardDuplicate<T>(birthCertificateNo: string | undefined, write: 
   }
 }
 
-function assertPlausibleBirthDate(dateOfBirth: Date) {
+// Age range depends on the school level (e.g. lower secondary 10–20, upper secondary 13–25)
+async function assertPlausibleBirthDate(dateOfBirth: Date) {
+  const { min, max } = STUDENT_AGE_RANGE[await getSchoolLevel()];
   const now = new Date();
   const ageAt = (years: number) => new Date(Date.UTC(now.getUTCFullYear() - years, now.getUTCMonth(), now.getUTCDate()));
-  if (dateOfBirth > ageAt(MIN_AGE) || dateOfBirth < ageAt(MAX_AGE)) {
-    throw new HttpError(400, 'VALIDATION_ERROR', `dateOfBirth must give an age between ${MIN_AGE} and ${MAX_AGE}`, {
+  if (dateOfBirth > ageAt(min) || dateOfBirth < ageAt(max)) {
+    throw new HttpError(400, 'VALIDATION_ERROR', `dateOfBirth must give an age between ${min} and ${max} for this school`, {
       field: 'dateOfBirth',
     });
   }
@@ -133,7 +133,7 @@ export async function getStudent(id: string) {
 const STUDENT_ID_LOCK = 7_260_001;
 
 export async function createStudent(data: CreateStudentInput) {
-  assertPlausibleBirthDate(data.dateOfBirth);
+  await assertPlausibleBirthDate(data.dateOfBirth);
   await assertCertificateFree(data.birthCertificateNo);
 
   return guardDuplicate(data.birthCertificateNo, () =>
@@ -151,7 +151,7 @@ export async function createStudent(data: CreateStudentInput) {
 
 export async function updateStudent(id: string, data: UpdateStudentInput) {
   if (!(await prisma.studentProfile.findUnique({ where: { id } }))) throw notFound();
-  if (data.dateOfBirth) assertPlausibleBirthDate(data.dateOfBirth);
+  if (data.dateOfBirth) await assertPlausibleBirthDate(data.dateOfBirth);
   if (data.birthCertificateNo) await assertCertificateFree(data.birthCertificateNo, id);
 
   return guardDuplicate(data.birthCertificateNo, () =>
