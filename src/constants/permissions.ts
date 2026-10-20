@@ -55,6 +55,8 @@ export const PERMISSIONS = {
   // Period results (average, mention, class rank) and report cards. Without _ANY: only the user's homeroom class
   RESULT: { CALCULATE: 'CALCULATE_RESULTS', CALCULATE_ANY: 'CALCULATE_ANY_RESULTS' },
   REPORT_CARD: { VIEW: 'VIEW_REPORT_CARDS', VIEW_ANY: 'VIEW_ANY_REPORT_CARDS' },
+  // MANAGE: assessment periods and each subject's scoring rules per period; LOCK: finalise / reopen a period
+  ASSESSMENT: { MANAGE: 'MANAGE_ASSESSMENT_RULES', LOCK: 'LOCK_ASSESSMENT_PERIODS' },
 } as const;
 
 export type PermissionCode =
@@ -66,7 +68,8 @@ export type PermissionCode =
   | (typeof PERMISSIONS.ATTENDANCE)[keyof typeof PERMISSIONS.ATTENDANCE]
   | (typeof PERMISSIONS.LEAVE_REQUEST)[keyof typeof PERMISSIONS.LEAVE_REQUEST]
   | (typeof PERMISSIONS.RESULT)[keyof typeof PERMISSIONS.RESULT]
-  | (typeof PERMISSIONS.REPORT_CARD)[keyof typeof PERMISSIONS.REPORT_CARD];
+  | (typeof PERMISSIONS.REPORT_CARD)[keyof typeof PERMISSIONS.REPORT_CARD]
+  | (typeof PERMISSIONS.ASSESSMENT)[keyof typeof PERMISSIONS.ASSESSMENT];
 
 export interface PermissionDefinition {
   module: string;
@@ -99,6 +102,8 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   { module: 'ASSESSMENT', code: 'CALCULATE_ANY_RESULTS', description: 'Calculate period results for any class' },
   { module: 'ASSESSMENT', code: 'VIEW_REPORT_CARDS', description: "Print report cards for one's homeroom class" },
   { module: 'ASSESSMENT', code: 'VIEW_ANY_REPORT_CARDS', description: 'Print report cards for any class' },
+  { module: 'ASSESSMENT', code: 'MANAGE_ASSESSMENT_RULES', description: 'Create assessment periods and set how each subject is scored in them' },
+  { module: 'ASSESSMENT', code: 'LOCK_ASSESSMENT_PERIODS', description: 'Lock a period so its scores and results are final, or reopen it' },
 ];
 
 export const ALL_PERMISSION_CODES: PermissionCode[] = PERMISSION_DEFINITIONS.map((p) => p.code);

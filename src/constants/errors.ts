@@ -115,7 +115,7 @@ const ERROR_DEFS = {
   ),
   ACADEMIC_YEAR_CLOSED: def(
     409,
-    (name: string, what: 'its classes' | 'its enrollments' | 'homeroom teachers' | 'its scores' | 'its teaching assignments' | 'its attendance') =>
+    (name: string, what: 'its classes' | 'its enrollments' | 'homeroom teachers' | 'its scores' | 'its teaching assignments' | 'its attendance' | 'its assessment periods') =>
       `Academic year ${name} is completed; ${what} can no longer be changed`,
   ),
   CLASS_IN_OTHER_YEAR: def(
@@ -219,6 +219,40 @@ const ERROR_DEFS = {
   ),
   NO_PREVIOUS_ENROLLMENT: def(409, (studentIdentifier: string) => `Student ${studentIdentifier} has no earlier enrollment; use NEW_ADMISSION`),
   SAME_CLASS_SECTION: def(400, 'Student is already in this class section'),
+
+  // ── Assessment periods & rules ──────────────────────────
+  ASSESSMENT_PERIOD_EXISTS: def(409, (name: string, yearName: string) => `A period named "${name}" already exists in ${yearName}`),
+  PERIOD_OUTSIDE_YEAR: def(
+    400,
+    (yearName: string, start: string, end: string) => `The period must lie within academic year ${yearName} (${start} – ${end})`,
+    { code: 'VALIDATION_ERROR', details: () => ({ field: 'startDate' }) },
+  ),
+  PERIOD_END_BEFORE_START: def(400, 'endDate must be on or after startDate', { code: 'VALIDATION_ERROR', details: fieldDetails('endDate') }),
+  DEADLINE_BEFORE_START: def(400, 'scoreEntryDeadline must be on or after startDate', {
+    code: 'VALIDATION_ERROR',
+    details: fieldDetails('scoreEntryDeadline'),
+  }),
+  PERIOD_HAS_SCORES: def(
+    409,
+    (name: string, scores: number, results: number) => `${name} already has ${scores} score(s) and ${results} result(s); it cannot be deleted`,
+  ),
+  PERIOD_ALREADY_IN_STATE: def(409, (name: string, locked: boolean) => `${name} is already ${locked ? 'locked' : 'open'}`),
+  RULES_HAVE_SCORES: def(
+    409,
+    (subjectName: string, periodName: string, scores: number) =>
+      `${subjectName} already has ${scores} score(s) in ${periodName}; its scoring rules can no longer change`,
+  ),
+  NO_RULES_FOR_SUBJECT: def(404, (subjectName: string, periodName: string) => `${subjectName} has no scoring rules in ${periodName}`, {
+    code: 'SUBJECT_ASSESSMENT_CONFIG_NOT_FOUND',
+  }),
+  COPY_FROM_SAME_PERIOD: def(400, 'Choose a different period to copy the rules from', {
+    code: 'VALIDATION_ERROR',
+    details: fieldDetails('fromAssessmentPeriodId'),
+  }),
+  SCORE_DEADLINE_PASSED: def(
+    409,
+    (periodName: string, deadline: string) => `The deadline for entering ${periodName} scores was ${deadline}; ask the principal to correct scores now`,
+  ),
 
   // ── Period results & reports ────────────────────────────
   NOT_HOMEROOM_FOR_CLASS: def(403, (className: string, action: string) => `Only the homeroom teacher of class ${className} can ${action}`),

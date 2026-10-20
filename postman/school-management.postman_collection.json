@@ -3313,6 +3313,460 @@
       ]
     },
     {
+      "name": "Assessment Periods",
+      "description": "Months / exam periods and how each subject is scored in them. Manage with MANAGE_ASSESSMENT_RULES; lock with LOCK_ASSESSMENT_PERIODS. Readable by whoever enters scores or prints report cards.",
+      "item": [
+        {
+          "name": "Create period",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/assessment-periods",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "assessment-periods"
+              ]
+            },
+            "description": "Dates within the academic year (YYYY-MM-DD). After scoreEntryDeadline only ENTER_ANY_SCORES can change scores.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"academicYearId\": \"{{academicYearId}}\",\n  \"name\": \"January\",\n  \"startDate\": \"2027-01-01\",\n  \"endDate\": \"2027-01-31\",\n  \"scoreEntryDeadline\": \"2027-02-05\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('assessmentPeriodId', pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List periods",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/assessment-periods",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "assessment-periods"
+              ],
+              "query": [
+                {
+                  "key": "academicYearId",
+                  "value": "{{academicYearId}}",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "In calendar order; defaults to the ACTIVE year."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get period (with rules)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/assessment-periods/{{assessmentPeriodId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "assessment-periods",
+                "{{assessmentPeriodId}}"
+              ]
+            },
+            "description": "Every subject's rules and how many scores were entered under them."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Set subject rules (direct)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/assessment-periods/{{assessmentPeriodId}}/subjects/{{subjectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "assessment-periods",
+                "{{assessmentPeriodId}}",
+                "subjects",
+                "{{subjectId}}"
+              ]
+            },
+            "description": "Scored as one total out of maxTotalScore.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"maxTotalScore\": 50\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Set subject rules (components)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/assessment-periods/{{assessmentPeriodId}}/subjects/{{subjectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "assessment-periods",
+                "{{assessmentPeriodId}}",
+                "subjects",
+                "{{subjectId}}"
+              ]
+            },
+            "description": "Components must add up to exactly maxTotalScore. Refused once scores exist.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"maxTotalScore\": 50,\n  \"components\": [\n    {\n      \"name\": \"កិច្ចការផ្ទះ\",\n      \"maxScore\": 20\n    },\n    {\n      \"name\": \"ប្រឡង\",\n      \"maxScore\": 30\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Copy rules from another period",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/assessment-periods/{{assessmentPeriodId}}/copy-rules",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "assessment-periods",
+                "{{assessmentPeriodId}}",
+                "copy-rules"
+              ]
+            },
+            "description": "Copies every subject's rules; subjects that already have rules here are skipped.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fromAssessmentPeriodId\": \"{{previousAssessmentPeriodId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update period",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/assessment-periods/{{assessmentPeriodId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "assessment-periods",
+                "{{assessmentPeriodId}}"
+              ]
+            },
+            "description": "Name, dates or deadline (null = no deadline). Not while locked.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scoreEntryDeadline\": \"2027-02-07\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Write report card remarks",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/scores/results/remarks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "scores",
+                "results",
+                "remarks"
+              ]
+            },
+            "description": "Homeroom teacher's comment (null clears). Needs calculated results and an open period.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assessmentPeriodId\": \"{{assessmentPeriodId}}\",\n  \"studentId\": \"{{studentId}}\",\n  \"remarks\": \"ខិតខំរៀនល្អ សូមបន្តទៀត\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lock period",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/assessment-periods/{{assessmentPeriodId}}/lock",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "assessment-periods",
+                "{{assessmentPeriodId}}",
+                "lock"
+              ]
+            },
+            "description": "Final: no score, rule, result or remark can change until unlocked."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unlock period",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/assessment-periods/{{assessmentPeriodId}}/unlock",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "assessment-periods",
+                "{{assessmentPeriodId}}",
+                "unlock"
+              ]
+            },
+            "description": "Reopens the period for corrections (audited)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Remove subject rules",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/assessment-periods/{{assessmentPeriodId}}/subjects/{{subjectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "assessment-periods",
+                "{{assessmentPeriodId}}",
+                "subjects",
+                "{{subjectId}}"
+              ]
+            },
+            "description": "Only before any score was entered under them."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete period",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/assessment-periods/{{assessmentPeriodId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "assessment-periods",
+                "{{assessmentPeriodId}}"
+              ]
+            },
+            "description": "Only before any score or result exists."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Subject Teachers",
       "description": "Who teaches which subject in which class (SubjectTeacherAssignment). Needs UPDATE_CLASS_SECTION or UPDATE_STAFF (Academic Coordinator), except My classes. Teachers can only enter scores for their own assignments.",
       "item": [

@@ -11,5 +11,6 @@ router.use(authenticate());
 router.post('/subject', requirePermission(PERMISSIONS.SCORE.ENTER), gradingController.recordSubjectScore);
 // Homeroom class only unless CALCULATE_ANY_RESULTS (checked in the service)
 router.post('/results/calculate', requireAnyPermission(PERMISSIONS.RESULT.CALCULATE, PERMISSIONS.RESULT.CALCULATE_ANY), gradingController.calculateResults);
+router.patch('/results/remarks', requireAnyPermission(PERMISSIONS.RESULT.CALCULATE, PERMISSIONS.RESULT.CALCULATE_ANY), gradingController.updateRemarks);
 
 export default router;

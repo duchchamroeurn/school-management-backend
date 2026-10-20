@@ -3,10 +3,8 @@
 import { Errors } from '../constants/errors';
 import { AcademicYearStatus, AttendanceStatus, LeaveRequestStatus, Prisma, StudentStatus } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
+import { isoDate, todayAtSchool } from '../utils/dates';
 import { audit } from './audit.service';
-
-// "Today" for the future-date check is the school's local date, not the server's UTC date
-const SCHOOL_TIME_ZONE = 'Asia/Phnom_Penh';
 
 export interface AttendanceEntryInput {
   studentId: string;
@@ -37,8 +35,6 @@ export interface MarkedAttendance {
   created: boolean;
 }
 
-const isoDate = (date: Date) => date.toISOString().slice(0, 10);
-const todayAtSchool = () => new Intl.DateTimeFormat('en-CA', { timeZone: SCHOOL_TIME_ZONE }).format(new Date()); // YYYY-MM-DD
 
 /**
  * Students (among studentIds) who have an APPROVED leave request covering `date` (start and end inclusive).

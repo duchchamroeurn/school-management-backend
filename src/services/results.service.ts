@@ -131,3 +131,33 @@ export async function calculateResults(actor: ResultsActor, classSectionId: stri
     { timeout: 60_000 },
   );
 }
+
+/** The homeroom teacher's comment on a student's report card (មតិយោបល់). null clears it. */
+export async function updateRemarks(actor: ResultsActor, assessmentPeriodId: string, studentId: string, remarks: string | null) {
+  return prisma.$transaction(async (tx) => {
+    const period = await tx.assessmentPeriod.findUnique({ where: { id: assessmentPeriodId }, include: { academicYear: true } });
+    if (!period) throw Errors.ASSESSMENT_PERIOD_NOT_FOUND();
+    const result = await tx.monthlyResult.findFirst({
+      where: { assessmentPeriodId, enrollment: { studentId, academicYearId: period.academicYearId } },
+      include: { enrollment: { include: { student: true, classSection: { include: { grade: true } } } } },
+    });
+    if (!result) throw Errors.STUDENT_NOT_IN_REPORT();
+    const { classSection, student } = result.enrollment;
+    const className = `${classSection.grade.gradeNumber}${classSection.sectionName}`;
+    if (!actor.canCalculateAny && (!actor.staffProfileId || classSection.homeroomTeacherId !== actor.staffProfileId)) {
+      throw Errors.NOT_HOMEROOM_FOR_CLASS(className, 'write its report card remarks');
+    }
+    if (period.isLocked) throw Errors.PERIOD_LOCKED(period.name, period.academicYear.name);
+
+    const updated = await tx.monthlyResult.update({ where: { id: result.id }, data: { remarks } });
+    await audit(tx, {
+      entityType: 'Result',
+      action: 'RESULT_REMARKS_UPDATED',
+      entityId: result.id,
+      entityLabel: `${student.studentIdentifier} ${student.latinName} — ${period.name} ${period.academicYear.name}`,
+      before: { remarks: result.remarks },
+      after: { remarks },
+    });
+    return { studentId, assessmentPeriodId, classSection: className, remarks: updated.remarks };
+  });
+}

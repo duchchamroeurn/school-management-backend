@@ -25,6 +25,19 @@ export const AUDIT_ACTIONS = {
   Grade: ['GRADE_CREATED', 'GRADE_UPDATED', 'GRADE_DELETED'],
   Subject: ['SUBJECT_CREATED', 'SUBJECT_UPDATED', 'SUBJECT_DELETED', 'SUBJECT_GRADES_ASSIGNED', 'SUBJECT_GRADE_UNASSIGNED'],
   SchoolSettings: ['SCHOOL_SETTINGS_UPDATED'],
+  // RULES_*: a subject's scoring rules (SubjectAssessmentConfig + components) in the period
+  AssessmentPeriod: [
+    'ASSESSMENT_PERIOD_CREATED',
+    'ASSESSMENT_PERIOD_UPDATED',
+    'ASSESSMENT_PERIOD_DELETED',
+    'ASSESSMENT_PERIOD_LOCKED',
+    'ASSESSMENT_PERIOD_UNLOCKED',
+    'SUBJECT_RULES_SET',
+    'SUBJECT_RULES_REMOVED',
+    'SUBJECT_RULES_COPIED',
+  ],
+  // entityId = the MonthlyResult; the teacher's comment on a report card
+  Result: ['RESULT_REMARKS_UPDATED'],
   // entityId = the MonthlySubjectScore; before/after hold the total and each component score
   SubjectScore: ['SUBJECT_SCORE_RECORDED'],
   // entityId = the class section; before/after map each student to their status (and whether leave excused it)

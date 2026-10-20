@@ -5,6 +5,7 @@ import { Errors } from '../constants/errors';
 import { AcademicYearStatus } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
 import { assertConfigComponentsValid } from '../utils/assessment';
+import { isoDate, todayAtSchool } from '../utils/dates';
 import { audit } from './audit.service';
 
 export interface ComponentScoreInput {
@@ -45,6 +46,10 @@ export async function recordSubjectScore(actor: ScoreActor, input: RecordSubject
     const period = await tx.assessmentPeriod.findUniqueOrThrow({ where: { id: input.assessmentPeriodId }, include: { academicYear: true } });
     const periodName = `${period.name} ${period.academicYear.name}`;
     if (period.isLocked) throw Errors.PERIOD_LOCKED(period.name, period.academicYear.name);
+    // After the deadline only ENTER_ANY_SCORES (principal) can still correct scores
+    if (!actor.canEnterAnyScore && period.scoreEntryDeadline && todayAtSchool() > isoDate(period.scoreEntryDeadline)) {
+      throw Errors.SCORE_DEADLINE_PASSED(periodName, isoDate(period.scoreEntryDeadline));
+    }
     if (period.academicYear.status === AcademicYearStatus.COMPLETED) throw Errors.ACADEMIC_YEAR_CLOSED(period.academicYear.name, 'its scores');
 
     // ── The subject, and the student's enrollment that year in a grade that teaches it ──

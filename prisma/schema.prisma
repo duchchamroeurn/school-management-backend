@@ -447,11 +447,16 @@ model YearlyEnrollment {
 
 // A month ("January") or exam period ("Semester 1") within an academic year
 model AssessmentPeriod {
-  id             String  @id @default(uuid())
-  name           String // e.g. "January", "Semester 1"
-  academicYearId String  @map("academic_year_id")
+  id                 String    @id @default(uuid())
+  name               String // e.g. "January", "Semester 1"
+  academicYearId     String    @map("academic_year_id")
+  // Within the academic year; periods are listed in startDate order (months and exam periods may overlap)
+  startDate          DateTime  @map("start_date") @db.Date
+  endDate            DateTime  @map("end_date") @db.Date
+  // Last day teachers may enter scores (ENTER_ANY_SCORES may still correct them afterwards); null = no deadline
+  scoreEntryDeadline DateTime? @map("score_entry_deadline") @db.Date
   // Locked = results are final: scores and configs for this period may no longer change
-  isLocked       Boolean @default(false) @map("is_locked")
+  isLocked           Boolean   @default(false) @map("is_locked")
 
   // Relations
   academicYear   AcademicYear              @relation(fields: [academicYearId], references: [id])
@@ -462,6 +467,7 @@ model AssessmentPeriod {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([academicYearId, name])
+  @@index([academicYearId, startDate])
   @@map("assessment_periods")
 }
 

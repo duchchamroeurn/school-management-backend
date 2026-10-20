@@ -208,7 +208,8 @@ All routes are prefixed with `/api/v1`. Except for `/health` and `/auth/login`, 
 | Me (own data) | `GET /me/profile`, `GET /me/homeroom?academicYear=` |
 | Teacher | `GET /teacher/my-classes?academicYear=` |
 | Audit log | `GET /audit-logs` |
-| Scores | `POST /scores/subject`, `POST /scores/results/calculate` |
+| Assessment periods | CRUD on `/assessment-periods`, plus `POST /:id/lock`, `POST /:id/unlock`, `PUT/DELETE /:id/subjects/:subjectId` and `POST /:id/copy-rules` |
+| Scores | `POST /scores/subject`, `POST /scores/results/calculate`, `PATCH /scores/results/remarks` |
 | Reports | `GET /reports/class-list/:classSectionId`, `GET /reports/gender-statistics`, `GET /reports/report-cards/:classSectionId` |
 | Users | `GET /users`, `GET /users/:id`, `POST /users`, `PUT /users/:id/roles`, `PATCH /users/:id/status`, `POST /users/:id/reset-password`, `DELETE /users/:id` |
 | Roles | `GET /roles`, `GET /roles/:id` |
@@ -279,6 +280,27 @@ POST /students/:id/guardians
 - **Dry run:** use `dryRun: true` to preview the result first; it returns `200`. A real run returns `201`.
 - **Audit:** each new enrollment and graduation is audited, plus one `CLASS_PROMOTED` entry for the class with the counts.
 
+### Setting up grading
+
+Scores are entered per assessment period: a month such as "January", or an exam period such as "Semester 1". Each period says how every subject is scored in it. Setting up periods and rules needs `MANAGE_ASSESSMENT_RULES`, which Principal and System Admin hold, or a custom Academic Coordinator role.
+
+1. **Create the period:**
+   `POST /assessment-periods { academicYearId, name, startDate, endDate, scoreEntryDeadline? }`.
+   - The dates must lie within the academic year.
+   - Periods are listed in date order.
+   - After `scoreEntryDeadline`, teachers can no longer enter scores. Only `ENTER_ANY_SCORES` can correct them.
+2. **Set each subject's rules:**
+   - Scored directly: `PUT /assessment-periods/:id/subjects/:subjectId { maxTotalScore }`
+   - With components: `{ maxTotalScore, components: [{ name, maxScore }] }`. The components must add up to exactly `maxTotalScore`.
+   - To reuse another period's rules, for example last month's or the same month last year: `POST /assessment-periods/:id/copy-rules { fromAssessmentPeriodId }`. Subjects that already have rules are skipped.
+3. **Teachers enter scores** (see below). A subject's rules freeze once a score is entered under them.
+4. **Homeroom teachers calculate results** with `POST /scores/results/calculate`, and write report card remarks with `PATCH /scores/results/remarks { assessmentPeriodId, studentId, remarks }`.
+5. **Lock the period** with `POST /assessment-periods/:id/lock`, which needs `LOCK_ASSESSMENT_PERIODS`.
+   - A locked period is final: no score, rule, result or remark can change.
+   - `POST /:id/unlock` reopens it for corrections. Both are audited.
+
+A period can only be deleted before any score or result exists.
+
 ### Entering scores
 
 `POST /scores/subject` records one student's score for one subject in one assessment period. Sending it again corrects the score. It returns `201` the first time and `200` after that.
@@ -308,6 +330,7 @@ How the subject is scored depends on that period's `SubjectAssessmentConfig`, so
 - **Component-based months:** every component of that month's config must be sent exactly once. Otherwise you get `400 COMPONENTS_MISMATCH`, which lists the unknown, duplicated and missing components. The component scores and the total are saved in one transaction.
 - **Refused when:**
   - the period is locked (`409 PERIOD_LOCKED`) or its academic year is completed
+  - the period's `scoreEntryDeadline` has passed (`409 SCORE_DEADLINE_PASSED`), except for `ENTER_ANY_SCORES`
   - the subject has no rules for that period (`404 SUBJECT_ASSESSMENT_CONFIG_NOT_FOUND`)
   - the student isn't enrolled that year
   - the subject isn't taught in the student's grade

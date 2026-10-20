@@ -56,3 +56,18 @@ export async function calculateResults(req: Request, res: Response) {
   );
   res.json({ status: 'success', data: result });
 }
+
+// PATCH /api/v1/scores/results/remarks — { assessmentPeriodId, studentId, remarks } (null clears)
+// The homeroom teacher's comment on the report card; needs calculated results and an open period.
+export async function updateRemarks(req: Request, res: Response) {
+  const body = bodyOf(req);
+  const actor = { staffProfileId: req.user!.staffProfileId, canCalculateAny: req.user!.permissions.includes(PERMISSIONS.RESULT.CALCULATE_ANY) };
+  const remarks = body.remarks === null ? null : required(optionalString(body.remarks, 'remarks', 500), 'remarks');
+  const result = await resultsService.updateRemarks(
+    actor,
+    required(optionalString(body.assessmentPeriodId, 'assessmentPeriodId'), 'assessmentPeriodId'),
+    required(optionalString(body.studentId, 'studentId'), 'studentId'),
+    remarks,
+  );
+  res.json({ status: 'success', data: result });
+}
