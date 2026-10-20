@@ -8,3 +8,4 @@ src/generated
 .windsurf
 coverage
 *.log
+backups

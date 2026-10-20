@@ -7,3 +7,6 @@ coverage
 
 # Real student/staff personal data — never commit
 /data
+
+# Database backups (personal data) — never commit
+/backups

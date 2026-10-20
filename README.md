@@ -116,13 +116,46 @@ cp .env.example .env     # then set JWT_SECRET and CORS_ORIGINS
 docker compose up --build
 ```
 
-This starts three services:
+This starts four services:
 
 - **db**: PostgreSQL 17 on port `5432`, stored in the `pgdata` volume
 - **migrate**: a one-off job that pushes the schema and seeds default data, then exits
 - **api**: the API on port `3000` (override with `API_PORT`), started once `migrate` succeeds
+- **backup**: nightly database backups (see [Backups](#backups))
 
 The containers read all settings from `.env`. Compose builds `DATABASE_URL` from `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB`, so the `DATABASE_URL` in `.env` is only used outside Docker.
+
+### Backups
+
+The `backup` service runs `pg_dump` when it starts and every night at `BACKUP_TIME` (default `02:00`, in `TZ`, default `Asia/Phnom_Penh`). Each dump is checked before it counts. Dumps older than `BACKUP_KEEP_DAYS` (default 14) are deleted, but only after a successful backup, so a failing backup never removes the last good copies.
+
+Dumps are written to `BACKUP_DIR` on the host (default `./backups`), as files like `school_management_2026-10-20_020000.dump`.
+
+> **Put `BACKUP_DIR` on a different disk than the database**, such as a second drive, a USB disk or a mounted NAS, for example `BACKUP_DIR=/mnt/backup-disk/school`. If the backups sit on the same disk, one disk failure loses both. For extra safety, copy the folder off-site now and then.
+
+Check that backups are running:
+
+```sh
+docker compose ps backup        # "healthy" means a good backup in the last 25 hours
+docker compose logs backup      # one line per backup, plus any errors
+```
+
+Take a backup now, for example before an upgrade:
+
+```sh
+docker compose exec backup /bin/sh /backup.sh once
+```
+
+Restore a backup. This replaces the current data:
+
+```sh
+docker compose stop api
+docker compose exec -T db pg_restore --clean --if-exists --no-owner \
+  -U school -d school_management < backups/school_management_2026-10-20_020000.dump
+docker compose start api
+```
+
+If you changed `POSTGRES_USER` or `POSTGRES_DB`, use those values for `-U` and `-d`.
 
 ## Scripts
 
