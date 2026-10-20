@@ -205,7 +205,8 @@ All routes are prefixed with `/api/v1`. Except for `/health` and `/auth/login`, 
 | --- | --- |
 | Health | `GET /health` |
 | Auth | `POST /auth/login`, `POST /auth/change-password`, `GET /auth/me` |
-| Me (own data) | `GET /me/profile`, `GET /me/homeroom?academicYear=`, `GET /me/teaching-assignments?academicYear=` |
+| Me (own data) | `GET /me/profile`, `GET /me/homeroom?academicYear=` |
+| Teacher | `GET /teacher/my-classes?academicYear=` |
 | Audit log | `GET /audit-logs` |
 | Scores | `POST /scores/subject` |
 | Users | `GET /users`, `GET /users/:id`, `POST /users`, `PUT /users/:id/roles`, `PATCH /users/:id/status`, `POST /users/:id/reset-password`, `DELETE /users/:id` |
@@ -243,7 +244,9 @@ These endpoints always use the signed-in login's own profile, never an id from t
 - **Managing assignments:** the Academic Coordinator manages assignments. That means anyone holding `UPDATE_CLASS_SECTION` or `UPDATE_STAFF`, which today is Principal and System Admin.
   - `GET /assignments/class/:classSectionId` lists every subject of the class's grade with its teacher, or `teacher: null` if the subject is vacant, plus a count of assigned and vacant subjects.
   - `POST /assignments/subject-teacher { staffId, subjectId, classSectionId }` assigns a teacher. The subject must be taught in that class's grade, and the year must not be completed.
-- **A teacher's own list:** teachers see their assignments with `GET /me/teaching-assignments`.
+- **A teacher's own classes:** `GET /teacher/my-classes` returns only what the signed-in teacher was assigned in the ACTIVE year, or in `?academicYear=2025-2026`. For each class it gives the subjects they teach there, whether it's their homeroom, and the number of enrolled students.
+- **Order of checks:** score entry checks the teacher's scope before it looks at the subject's rules for the month. A teacher outside their scope gets `403` and learns nothing about that subject.
+- **Optional `classSectionId`:** a request may include `classSectionId`. It must be the class the student is enrolled in that year, or the request is rejected with `400`.
 
 How the subject is scored depends on that period's `SubjectAssessmentConfig`, so the same subject can follow different rules from month to month:
 

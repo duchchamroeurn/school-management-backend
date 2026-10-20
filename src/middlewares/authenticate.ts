@@ -28,7 +28,10 @@ export const authenticate =
 
     const user = await prisma.user.findUnique({
       where: { id: payload.sub },
-      include: { userRoles: { include: { role: { include: { rolePermissions: { include: { permission: true } } } } } } },
+      include: {
+        userRoles: { include: { role: { include: { rolePermissions: { include: { permission: true } } } } } },
+        staffProfile: { select: { id: true } },
+      },
     });
 
     if (!user || user.status !== 'ACTIVE') {
@@ -48,6 +51,7 @@ export const authenticate =
       mustChangePassword: user.mustChangePassword,
       roles: user.userRoles.map((ur) => ur.role.latinName),
       permissions: [...new Set(user.userRoles.flatMap((ur) => ur.role.rolePermissions.map((rp) => rp.permission.code)))],
+      staffProfileId: user.staffProfile?.id ?? null,
     };
     // Lets the audit log record who made each change
     const context = currentContext();

@@ -23,17 +23,19 @@ function parseComponents(value: unknown): gradingService.ComponentScoreInput[] |
 }
 
 // POST /api/v1/scores/subject
-// Body: { studentId, subjectId, assessmentPeriodId, totalScoreAchieved? , components?: [{ componentId, score }] }
+// Body: { studentId, subjectId, assessmentPeriodId, classSectionId?, totalScoreAchieved?, components?: [{ componentId, score }] }
 // Send totalScoreAchieved when the subject is scored directly that month, components when it is component-based.
 // Sending again corrects the score. 201 when first recorded, 200 when updated.
-// Only the teacher assigned to the subject in the student's class may do this, unless they hold ENTER_ANY_SCORES.
+// Only the teacher assigned to the subject in the student's class may do this (403 otherwise), unless they hold
+// ENTER_ANY_SCORES. classSectionId is optional; when sent it must be the student's class.
 export async function recordSubjectScore(req: Request, res: Response) {
   const body = bodyOf(req);
-  const actor = { userId: req.user!.id, canEnterAnyScore: req.user!.permissions.includes(PERMISSIONS.SCORE.ENTER_ANY) };
+  const actor = { staffProfileId: req.user!.staffProfileId, canEnterAnyScore: req.user!.permissions.includes(PERMISSIONS.SCORE.ENTER_ANY) };
   const { created, result } = await gradingService.recordSubjectScore(actor, {
     studentId: required(optionalString(body.studentId, 'studentId'), 'studentId'),
     subjectId: required(optionalString(body.subjectId, 'subjectId'), 'subjectId'),
     assessmentPeriodId: required(optionalString(body.assessmentPeriodId, 'assessmentPeriodId'), 'assessmentPeriodId'),
+    classSectionId: optionalString(body.classSectionId, 'classSectionId'),
     totalScoreAchieved: optionalScore(body.totalScoreAchieved, 'totalScoreAchieved'),
     components: parseComponents(body.components),
   });

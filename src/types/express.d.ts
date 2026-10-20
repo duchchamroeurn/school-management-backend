@@ -4,6 +4,7 @@ export interface AuthUser {
   mustChangePassword: boolean;
   roles: string[];
   permissions: string[];
+  staffProfileId: string | null; // set for staff logins; scopes what a teacher may see and score
 }
 
 declare global {

@@ -2508,7 +2508,7 @@
     },
     {
       "name": "Subject Teachers",
-      "description": "Who teaches which subject in which class (SubjectTeacherAssignment). Needs UPDATE_CLASS_SECTION or UPDATE_STAFF (Academic Coordinator), except My teaching assignments. Teachers can only enter scores for their own assignments.",
+      "description": "Who teaches which subject in which class (SubjectTeacherAssignment). Needs UPDATE_CLASS_SECTION or UPDATE_STAFF (Academic Coordinator), except My classes. Teachers can only enter scores for their own assignments.",
       "item": [
         {
           "name": "Assign teacher to subject in class",
@@ -2711,21 +2711,29 @@
           ]
         },
         {
-          "name": "My teaching assignments",
+          "name": "My classes (teacher)",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/me/teaching-assignments",
+              "raw": "{{baseUrl}}/teacher/my-classes",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "me",
-                "teaching-assignments"
+                "teacher",
+                "my-classes"
+              ],
+              "query": [
+                {
+                  "key": "academicYear",
+                  "value": "2026-2027",
+                  "disabled": true,
+                  "description": "Defaults to the ACTIVE year"
+                }
               ]
             },
-            "description": "The signed-in teacher's subjects and classes in the ACTIVE year (or ?academicYear=2026-2027). Needs ENTER_SCORES."
+            "description": "The signed-in teacher's data scope: their classes in the ACTIVE year, each with the subjects they teach there, isHomeroom and studentCount. Needs ENTER_SCORES."
           },
           "event": [
             {
@@ -2787,7 +2795,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"studentId\": \"{{studentId}}\",\n  \"subjectId\": \"{{subjectId}}\",\n  \"assessmentPeriodId\": \"{{assessmentPeriodId}}\",\n  \"totalScoreAchieved\": 44.5\n}",
+              "raw": "{\n  \"studentId\": \"{{studentId}}\",\n  \"subjectId\": \"{{subjectId}}\",\n  \"assessmentPeriodId\": \"{{assessmentPeriodId}}\",\n  \"classSectionId\": \"{{classSectionId}}\",\n  \"totalScoreAchieved\": 44.5\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2804,7 +2812,7 @@
                 "subject"
               ]
             },
-            "description": "For a month where the subject is scored directly (isComponentBased = false). 0 ≤ totalScoreAchieved ≤ maxTotalScore, at most two decimals. Sending again corrects the score (201 first time, 200 after)."
+            "description": "For a month where the subject is scored directly (isComponentBased = false). 0 ≤ totalScoreAchieved ≤ maxTotalScore, at most two decimals. Sending again corrects the score (201 first time, 200 after). Only the teacher assigned to the subject in the student's class may do this (403 otherwise) unless they hold ENTER_ANY_SCORES; classSectionId is optional and must be the student's class."
           },
           "event": [
             {
@@ -2831,7 +2839,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"studentId\": \"{{studentId}}\",\n  \"subjectId\": \"{{subjectId}}\",\n  \"assessmentPeriodId\": \"{{assessmentPeriodId}}\",\n  \"components\": [\n    {\n      \"componentId\": \"{{componentId1}}\",\n      \"score\": 18\n    },\n    {\n      \"componentId\": \"{{componentId2}}\",\n      \"score\": 7.5\n    },\n    {\n      \"componentId\": \"{{componentId3}}\",\n      \"score\": 65\n    }\n  ]\n}",
+              "raw": "{\n  \"studentId\": \"{{studentId}}\",\n  \"subjectId\": \"{{subjectId}}\",\n  \"assessmentPeriodId\": \"{{assessmentPeriodId}}\",\n  \"classSectionId\": \"{{classSectionId}}\",\n  \"components\": [\n    {\n      \"componentId\": \"{{componentId1}}\",\n      \"score\": 18\n    },\n    {\n      \"componentId\": \"{{componentId2}}\",\n      \"score\": 7.5\n    },\n    {\n      \"componentId\": \"{{componentId3}}\",\n      \"score\": 65\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2848,7 +2856,7 @@
                 "subject"
               ]
             },
-            "description": "For a month where the subject is component-based. Send every component of that month's config exactly once (else 400 COMPONENTS_MISMATCH); each 0 ≤ score ≤ its maxScore. The total is calculated as their sum."
+            "description": "For a month where the subject is component-based. Send every component of that month's config exactly once (else 400 COMPONENTS_MISMATCH); each 0 ≤ score ≤ its maxScore. The total is calculated as their sum. Only the teacher assigned to the subject in the student's class may do this (403 otherwise) unless they hold ENTER_ANY_SCORES; classSectionId is optional and must be the student's class."
           },
           "event": [
             {

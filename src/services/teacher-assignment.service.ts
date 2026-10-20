@@ -4,7 +4,7 @@
 // ENTER_ANY_SCORES). The API calls the teacher `staffId`, like the rest of the API; the column is staffProfileId.
 // Managed by the Academic Coordinator (UPDATE_CLASS_SECTION or UPDATE_STAFF) under /api/v1/assignments.
 import { Errors } from '../constants/errors';
-import { AcademicYearStatus, Prisma } from '../generated/prisma/client';
+import { AcademicYearStatus, Prisma, StudentStatus } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
 import { audit } from './audit.service';
 
@@ -157,19 +157,63 @@ export async function deleteTeachingAssignment(id: string) {
   });
 }
 
-/** The signed-in teacher's own assignments in the given or the ACTIVE academic year. */
-export async function listOwnTeachingAssignments(userId: string, academicYearName?: string) {
-  const [staff, academicYear] = await Promise.all([
-    prisma.staffProfile.findUnique({ where: { userId }, select: { id: true } }),
-    academicYearName
-      ? prisma.academicYear.findUnique({ where: { name: academicYearName } })
-      : prisma.academicYear.findFirst({ where: { status: AcademicYearStatus.ACTIVE } }),
-  ]);
-  if (!staff) throw Errors.OWN_STAFF_PROFILE_NOT_FOUND();
+/**
+ * The signed-in teacher's data scope: the classes they teach in the given or the ACTIVE academic year, each
+ * with the subjects they teach there. Nothing outside their SubjectTeacherAssignments is returned.
+ */
+export async function getMyClasses(staffProfileId: string | null, academicYearName?: string) {
+  if (!staffProfileId) throw Errors.OWN_STAFF_PROFILE_NOT_FOUND();
+  const academicYear = academicYearName
+    ? await prisma.academicYear.findUnique({ where: { name: academicYearName } })
+    : await prisma.academicYear.findFirst({ where: { status: AcademicYearStatus.ACTIVE } });
   if (!academicYear) {
     throw academicYearName ? Errors.ACADEMIC_YEAR_NOT_FOUND(academicYearName) : Errors.ACADEMIC_YEAR_REQUIRED();
   }
-  return listTeachingAssignments({ staffId: staff.id, academicYearId: academicYear.id });
+
+  const assignments = await prisma.subjectTeacherAssignment.findMany({
+    where: { staffProfileId, academicYearId: academicYear.id },
+    include: {
+      subject: { select: { id: true, code: true, khmerName: true, latinName: true, isCoreSubject: true } },
+      classSection: {
+        select: {
+          id: true,
+          sectionName: true,
+          homeroomTeacherId: true,
+          grade: { select: { id: true, gradeNumber: true } },
+          // Students currently occupying a seat (dropped out / graduated excluded)
+          _count: { select: { enrollments: { where: { student: { status: StudentStatus.ENROLLED } } } } },
+        },
+      },
+    },
+    orderBy: [{ classSection: { grade: { gradeNumber: 'asc' } } }, { classSection: { sectionName: 'asc' } }, { subject: { code: 'asc' } }],
+  });
+
+  type MyClass = {
+    classSection: { id: string; name: string; sectionName: string; grade: { id: string; gradeNumber: number } };
+    isHomeroom: boolean;
+    studentCount: number;
+    subjects: { assignmentId: string; subject: (typeof assignments)[number]['subject'] }[];
+  };
+  const classes = new Map<string, MyClass>();
+  for (const a of assignments) {
+    const c = a.classSection;
+    let entry = classes.get(c.id);
+    if (!entry) {
+      entry = {
+        classSection: { id: c.id, name: `${c.grade.gradeNumber}${c.sectionName}`, sectionName: c.sectionName, grade: c.grade },
+        isHomeroom: c.homeroomTeacherId === staffProfileId,
+        studentCount: c._count.enrollments,
+        subjects: [],
+      };
+      classes.set(c.id, entry);
+    }
+    entry.subjects.push({ assignmentId: a.id, subject: a.subject });
+  }
+
+  return {
+    academicYear: { id: academicYear.id, name: academicYear.name, status: academicYear.status },
+    classes: [...classes.values()],
+  };
 }
 
 /**

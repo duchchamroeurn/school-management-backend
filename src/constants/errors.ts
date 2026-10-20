@@ -275,6 +275,10 @@ const ERROR_DEFS = {
   ),
   PERIOD_LOCKED: def(409, (periodName: string, yearName: string) => `${periodName} ${yearName} is locked; its scores can no longer change`),
   STUDENT_NOT_ENROLLED_IN_YEAR: def(409, (studentIdentifier: string, yearName: string) => `Student ${studentIdentifier} is not enrolled in academic year ${yearName}`),
+  STUDENT_NOT_IN_CLASS: def(400, (studentIdentifier: string, actualClass: string) => `Student ${studentIdentifier} is not in that class; they are in ${actualClass}`, {
+    code: 'VALIDATION_ERROR',
+    details: (_s: string, actualClass: string) => ({ field: 'classSectionId', actualClass }),
+  }),
   SUBJECT_NOT_IN_GRADE: def(400, (subjectName: string, gradeNumber: number) => `${subjectName} is not taught in grade ${gradeNumber}`),
   NOT_TEACHING_SUBJECT: def(
     403,

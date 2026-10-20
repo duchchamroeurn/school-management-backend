@@ -16,6 +16,7 @@ export interface RecordSubjectScoreInput {
   studentId: string;
   subjectId: string;
   assessmentPeriodId: string;
+  classSectionId?: string; // optional; must be the class the student is enrolled in that year
   totalScoreAchieved?: number; // months where the subject is scored directly
   components?: ComponentScoreInput[]; // months where the subject is component-based
 }
@@ -25,8 +26,8 @@ const hundredths = (value: number) => Math.round(value * 100);
 const sumScores = (scores: number[]) => scores.reduce((sum, s) => sum + hundredths(s), 0) / 100;
 
 export interface ScoreActor {
-  userId: string;
-  // ENTER_ANY_SCORES: may score any subject and class; otherwise only where they hold the teaching assignment
+  staffProfileId: string | null; // the signed-in user's staff profile (null for non-staff logins)
+  // ENTER_ANY_SCORES: may score any subject and class; otherwise only where they hold the SubjectTeacherAssignment
   canEnterAnyScore: boolean;
 }
 
@@ -46,47 +47,53 @@ export async function recordSubjectScore(actor: ScoreActor, input: RecordSubject
     if (period.isLocked) throw Errors.PERIOD_LOCKED(period.name, period.academicYear.name);
     if (period.academicYear.status === AcademicYearStatus.COMPLETED) throw Errors.ACADEMIC_YEAR_CLOSED(period.academicYear.name, 'its scores');
 
-    // ── This month's rules for the subject ───────────────────────────────
-    const config = await tx.subjectAssessmentConfig.findUnique({
-      where: { subjectId_assessmentPeriodId: { subjectId: input.subjectId, assessmentPeriodId: period.id } },
-      include: { subject: true, components: { orderBy: { name: 'asc' } } },
-    });
-    if (!config) {
-      const subject = await tx.subject.findUnique({ where: { id: input.subjectId } });
-      if (!subject) throw Errors.SUBJECT_NOT_FOUND();
-      throw Errors.NO_ASSESSMENT_CONFIG(subject.latinName, periodName);
-    }
-    // Never score against broken rules (e.g. components that don't add up to the maximum)
-    assertConfigComponentsValid(config);
-    const subjectName = config.subject.latinName;
-
-    // ── The student's enrollment that year, in a grade that teaches the subject ──
+    // ── The subject, and the student's enrollment that year in a grade that teaches it ──
+    const subject = await tx.subject.findUnique({ where: { id: input.subjectId } });
+    if (!subject) throw Errors.SUBJECT_NOT_FOUND();
+    const subjectName = subject.latinName;
     const student = await tx.studentProfile.findUnique({ where: { id: input.studentId } });
     if (!student) throw Errors.STUDENT_NOT_FOUND();
     const enrollment = await tx.yearlyEnrollment.findUnique({
       where: { studentId_academicYearId: { studentId: student.id, academicYearId: period.academicYearId } },
-      include: { classSection: { include: { grade: { include: { gradeSubjects: { where: { subjectId: config.subjectId } } } } } } },
+      include: { classSection: { include: { grade: { include: { gradeSubjects: { where: { subjectId: subject.id } } } } } } },
     });
     if (!enrollment) throw Errors.STUDENT_NOT_ENROLLED_IN_YEAR(student.studentIdentifier, period.academicYear.name);
     const { grade } = enrollment.classSection;
+    const className = `${grade.gradeNumber}${enrollment.classSection.sectionName}`;
+    // The class always comes from the enrollment; a classSectionId sent by the client must agree with it
+    if (input.classSectionId !== undefined && input.classSectionId !== enrollment.classSectionId) {
+      throw Errors.STUDENT_NOT_IN_CLASS(student.studentIdentifier, className);
+    }
     if (grade.gradeSubjects.length === 0) throw Errors.SUBJECT_NOT_IN_GRADE(subjectName, grade.gradeNumber);
 
-    // ── Only the teacher assigned to this subject in the student's class (unless ENTER_ANY_SCORES) ──
+    // ── Data scope: checked before anything about the subject's rules is read or revealed.
+    //    Only the teacher assigned to this subject in this class and year, unless ENTER_ANY_SCORES ──
     if (!actor.canEnterAnyScore) {
-      const assignment = await tx.subjectTeacherAssignment.findUnique({
-        where: {
-          subjectId_classSectionId_academicYearId: {
-            subjectId: config.subjectId,
-            classSectionId: enrollment.classSectionId,
-            academicYearId: enrollment.academicYearId,
+      const assignment =
+        actor.staffProfileId &&
+        (await tx.subjectTeacherAssignment.findUnique({
+          where: {
+            subjectId_classSectionId_academicYearId: {
+              subjectId: subject.id,
+              classSectionId: enrollment.classSectionId,
+              academicYearId: enrollment.academicYearId,
+            },
           },
-        },
-        select: { staffProfile: { select: { userId: true } } },
-      });
-      if (assignment?.staffProfile.userId !== actor.userId) {
-        throw Errors.NOT_TEACHING_SUBJECT(subjectName, `${grade.gradeNumber}${enrollment.classSection.sectionName}`);
+          select: { staffProfileId: true },
+        }));
+      if (!assignment || assignment.staffProfileId !== actor.staffProfileId) {
+        throw Errors.NOT_TEACHING_SUBJECT(subjectName, className);
       }
     }
+
+    // ── This month's rules for the subject ───────────────────────────────
+    const config = await tx.subjectAssessmentConfig.findUnique({
+      where: { subjectId_assessmentPeriodId: { subjectId: subject.id, assessmentPeriodId: period.id } },
+      include: { subject: true, components: { orderBy: { name: 'asc' } } },
+    });
+    if (!config) throw Errors.NO_ASSESSMENT_CONFIG(subjectName, periodName);
+    // Never score against broken rules (e.g. components that don't add up to the maximum)
+    assertConfigComponentsValid(config);
 
     // Current scores, for the audit log's before/after
     const previous = await tx.monthlySubjectScore.findUnique({

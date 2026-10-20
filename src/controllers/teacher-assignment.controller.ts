@@ -46,8 +46,8 @@ export async function classOverview(req: Request<{ classSectionId: string }>, re
   res.json({ status: 'success', data: await teacherAssignmentService.getClassSubjectTeachers(req.params.classSectionId) });
 }
 
-// GET /api/v1/me/teaching-assignments?academicYear=2026-2027 (defaults to the ACTIVE year)
-export async function listOwn(req: Request, res: Response) {
+// GET /api/v1/teacher/my-classes?academicYear=2026-2027 (defaults to the ACTIVE year)
+export async function myClasses(req: Request, res: Response) {
   const academicYear = queryString(req.query.academicYear, 'academicYear');
-  res.json({ status: 'success', data: await teacherAssignmentService.listOwnTeachingAssignments(req.user!.id, academicYear) });
+  res.json({ status: 'success', data: await teacherAssignmentService.getMyClasses(req.user!.staffProfileId, academicYear) });
 }

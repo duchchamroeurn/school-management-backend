@@ -19,6 +19,7 @@ import schoolSettingsRoutes from './routes/school-settings.routes';
 import staffRoutes from './routes/staff.routes';
 import studentRoutes from './routes/student.routes';
 import subjectRoutes from './routes/subject.routes';
+import teacherRoutes from './routes/teacher.routes';
 import { permissionRoutes, roleRoutes } from './routes/role.routes';
 import { userRoutes } from './routes/user.routes';
 import { errorHandler, notFound } from './middlewares/errorHandler';
@@ -55,6 +56,7 @@ app.use('/api/v1/roles', roleRoutes);
 app.use('/api/v1/permissions', permissionRoutes);
 app.use('/api/v1/enrollments', enrollmentRoutes);
 app.use('/api/v1/assignments', assignmentRoutes);
+app.use('/api/v1/teacher', teacherRoutes);
 app.use('/api/v1/scores', gradingRoutes);
 app.use('/api/v1/audit-logs', auditLogRoutes);
 
