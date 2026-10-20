@@ -1,9 +1,9 @@
-// Server settings, read from the environment (.env) and checked once at startup. Every problem is reported
+// Server settings, read from the environment and checked once at startup. Every problem is reported
 // together and the process exits, so a misconfigured server never starts. See .env.example for each setting.
+// server.ts loads .env before this module runs.
 //
 // Settings only the seed/demo scripts use (SEED_ADMIN_*, DEMO_PASSWORD) are read by those scripts, so they
 // can run without the server's secrets.
-import 'dotenv/config';
 import jwt from 'jsonwebtoken';
 import { isSchoolLevel } from '../constants/school-levels';
 import { SchoolLevel } from '../generated/prisma/client';
@@ -102,6 +102,26 @@ const login = {
   ipWindowMinutes: int('LOGIN_IP_WINDOW_MINUTES', 15),
 };
 
+// ── Logging ───────────────────────────────────────────────
+const LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const;
+const LOG_FORMATS = ['json', 'pretty'] as const;
+
+function oneOf<T extends string>(name: string, allowed: readonly T[], fallback: T): T {
+  const raw = env[name]?.trim();
+  if (!raw) return fallback;
+  if (!allowed.includes(raw as T)) {
+    problems.push(`${name} must be one of ${allowed.join(', ')} (got "${raw}")`);
+    return fallback;
+  }
+  return raw as T;
+}
+
+const log = {
+  level: oneOf('LOG_LEVEL', LOG_LEVELS, 'info'),
+  // json: one JSON object per line, for log collectors; pretty: readable lines for development
+  format: oneOf('LOG_FORMAT', LOG_FORMATS, 'json'),
+};
+
 // ── School (first install only; afterwards the database is the source of truth) ──
 const schoolLevel = env.SCHOOL_LEVEL?.trim();
 if (schoolLevel && !isSchoolLevel(schoolLevel)) {
@@ -120,4 +140,5 @@ export const config = {
   port,
   corsOrigins,
   login,
+  log,
 };

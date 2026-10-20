@@ -66,6 +66,8 @@ npm run jwt:secret        # writes a random JWT_SECRET into .env
 | `JWT_EXPIRES_IN` | No | `8h` | Access token lifetime, with a unit (`30m`, `8h`, `7d`) |
 | `PORT` | No | `3000` | API port |
 | `NODE_ENV` | No | | Set to `production` to block the demo scripts |
+| `LOG_LEVEL` | No | `info` | `debug`, `info`, `warn` or `error` |
+| `LOG_FORMAT` | No | `json` | `json` (one object per line) or `pretty` (readable, for development) |
 | `LOGIN_MAX_FAILURES` | No | `5` | Failed logins in a row before a username is locked |
 | `LOGIN_LOCK_MINUTES` | No | `15` | How long a locked username stays locked |
 | `LOGIN_IP_MAX_FAILURES` | No | `30` | Failed logins from one IP before that IP is blocked |
@@ -102,6 +104,12 @@ The API runs at `http://localhost:3000/api/v1`. Check it with:
 ```sh
 curl http://localhost:3000/api/v1/health
 ```
+
+The health check returns `200` only when the API can serve requests. It returns `503 SERVICE_UNAVAILABLE` if the database doesn't answer within 3 seconds, or while the server is shutting down.
+
+**Shutdown:** on `SIGTERM` (for example `docker compose stop`) or `Ctrl+C`, the API stops accepting connections, lets running requests finish, then closes the database connections. If requests are still running after 8 seconds, it exits anyway.
+
+**Logs:** every request is logged as one line with method, path, status, duration, IP and the signed-in user. Query strings are left out because searches contain names, and request bodies are never logged. Each response has an `X-Request-Id` header, and log lines written during that request carry the same `requestId`, so an error a user reports can be found in the logs. If the frontend or a proxy sends its own `X-Request-Id`, that value is used. Errors and `4xx`/`5xx` requests go to stderr; everything else goes to stdout.
 
 ### First login
 

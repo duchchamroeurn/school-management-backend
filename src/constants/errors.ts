@@ -41,6 +41,8 @@ const ERROR_DEFS = {
   ROUTE_NOT_FOUND: def(404, (method: string, path: string) => `Route ${method} ${path} not found`, { code: 'NOT_FOUND' }),
   CONFLICT: def(409, 'Another change was made at the same time; please retry'),
   INTERNAL_ERROR: def(500, 'Something went wrong'),
+  DATABASE_UNAVAILABLE: def(503, 'The database is not reachable', { code: 'SERVICE_UNAVAILABLE' }),
+  SHUTTING_DOWN: def(503, 'The server is shutting down', { code: 'SERVICE_UNAVAILABLE' }),
   // Database constraint errors a service didn't translate itself (safety net in errorHandler)
   DUPLICATE: def(409, 'A record with these values already exists'),
   IN_USE: def(409, 'This record is referenced by other records'),

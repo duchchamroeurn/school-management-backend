@@ -1,14 +1,17 @@
-import express, { Application, Request, Response } from 'express';
+import express, { Application } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { config } from './config/env';
+import { isShuttingDown } from './lib/lifecycle';
 import { requestContext } from './lib/requestContext';
+import { requestLogger } from './middlewares/requestLogger';
 import academicYearRoutes from './routes/academic-year.routes';
 import auditLogRoutes from './routes/audit-log.routes';
 import authRoutes from './routes/auth.routes';
 import classSectionRoutes from './routes/class-section.routes';
 import enrollmentRoutes from './routes/enrollment.routes';
 import gradeRoutes from './routes/grade.routes';
+import healthRoutes from './routes/health.routes';
 import meRoutes from './routes/me.routes';
 import schoolSettingsRoutes from './routes/school-settings.routes';
 import staffRoutes from './routes/staff.routes';
@@ -21,18 +24,21 @@ import { errorHandler, notFound } from './middlewares/errorHandler';
 const app: Application = express();
 
 // Global Middlewares
+// First, so every request (even a malformed one) gets a request id and a log entry
+app.use(requestContext);
+app.use(requestLogger);
+// While shutting down, ask keep-alive clients to reconnect, so the server can close their connections
+app.use((_req, res, next) => {
+  if (isShuttingDown()) res.setHeader('Connection', 'close');
+  next();
+});
 app.use(helmet());
 // Only the frontend origins in CORS_ORIGINS get CORS headers, so browsers block other websites.
 // Non-browser clients (Postman, curl) are unaffected.
 app.use(cors({ origin: config.corsOrigins }));
 app.use(express.json());
-app.use(requestContext);
 
-// Health Check Route
-app.get('/api/v1/health', (req: Request, res: Response) => {
-  res.status(200).json({ status: 'success', message: 'School System API is running.' });
-});
-
+app.use('/api/v1/health', healthRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/me', meRoutes);
 app.use('/api/v1/school-settings', schoolSettingsRoutes);

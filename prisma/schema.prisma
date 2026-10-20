@@ -169,7 +169,7 @@ model StaffProfile {
   gender         Gender
   phone          String?
   telegramHandle String?  @map("telegram_handle")
-  hireDate       DateTime @map("hire_date")
+  hireDate       DateTime @map("hire_date") @db.Date
 
   // Link to Auth User (1-to-1). If user is deleted, profile remains.
   userId String? @unique @map("user_id")

@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import { Errors } from '../constants/errors';
 import { Prisma } from '../generated/prisma/client';
+import { logger } from '../lib/logger';
 import { HttpError } from '../utils/httpError';
 
 // Safety net for constraint errors a service didn't translate itself
@@ -23,7 +24,7 @@ export const notFound = (req: Request, _res: Response, next: NextFunction) => {
 };
 
 // Express 5 forwards errors thrown in async handlers here automatically
-export const errorHandler = (err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+export const errorHandler = (err: unknown, req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof HttpError) {
     send(res, err);
     return;
@@ -37,6 +38,7 @@ export const errorHandler = (err: unknown, _req: Request, res: Response, _next: 
     send(res, Errors.INVALID_JSON());
     return;
   }
-  console.error(err);
+  // The client gets only a generic message (plus the X-Request-Id header to quote); the details go to the log
+  logger.error('Unhandled error', { method: req.method, path: req.originalUrl.split('?')[0], err });
   send(res, Errors.INTERNAL_ERROR());
 };
