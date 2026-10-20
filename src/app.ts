@@ -11,7 +11,8 @@ import schoolSettingsRoutes from './routes/school-settings.routes';
 import staffRoutes from './routes/staff.routes';
 import studentRoutes from './routes/student.routes';
 import subjectRoutes from './routes/subject.routes';
-import { roleRoutes, userRoutes } from './routes/user.routes';
+import { permissionRoutes, roleRoutes } from './routes/role.routes';
+import { userRoutes } from './routes/user.routes';
 import { errorHandler, notFound } from './middlewares/errorHandler';
 
 dotenv.config();
@@ -38,6 +39,7 @@ app.use('/api/v1/students', studentRoutes);
 app.use('/api/v1/staff', staffRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/roles', roleRoutes);
+app.use('/api/v1/permissions', permissionRoutes);
 app.use('/api/v1/enrollments', enrollmentRoutes);
 
 app.use(notFound);

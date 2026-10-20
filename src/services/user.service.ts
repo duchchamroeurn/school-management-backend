@@ -3,6 +3,7 @@ import { Prisma, UserStatus } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../utils/httpError';
 import { checkPasswordPolicy, generateTemporaryPassword, hashPassword } from '../utils/password';
+import { assertCanGrant } from './role.service';
 
 export type ProfileRef = { staffId: string; studentId?: undefined } | { studentId: string; staffId?: undefined };
 
@@ -106,6 +107,13 @@ async function resolveRoles(tx: Prisma.TransactionClient, roleIds: string[] | un
   return roles;
 }
 
+// Privilege-escalation guard: the actor must hold every permission the assigned roles carry
+async function assertCanAssign(tx: Prisma.TransactionClient, actorPermissions: string[] | undefined, roleIds: string[]) {
+  if (!actorPermissions) return;
+  const granted = await tx.rolePermission.findMany({ where: { roleId: { in: roleIds } }, select: { permission: { select: { code: true } } } });
+  assertCanGrant(actorPermissions, granted.map((g) => g.permission.code));
+}
+
 async function loadUser(tx: Prisma.TransactionClient, id: string) {
   const user = await tx.user.findUnique({ where: { id }, include: userInclude });
   if (!user) throw notFound();
@@ -139,7 +147,8 @@ export async function getUser(id: string) {
  * Create Login: a user account always belongs to exactly one staff OR student profile (1:1).
  * The profile row is locked so two simultaneous requests can't both attach a login to it.
  */
-export async function createLogin(input: CreateLoginInput) {
+// actorPermissions undefined = internal call (seed), no escalation check
+export async function createLogin(input: CreateLoginInput, actorPermissions?: string[]) {
   const profileType = input.staffId ? 'STAFF' : 'STUDENT';
   const profileId = input.staffId ?? input.studentId;
   const password = resolvePassword(input.temporaryPassword);
@@ -167,6 +176,7 @@ export async function createLogin(input: CreateLoginInput) {
       }
 
       const roles = await resolveRoles(tx, input.roleIds, profileType);
+      await assertCanAssign(tx, actorPermissions, roles.map((r) => r.id));
       return tx.user.create({
         data: {
           username: input.username,
@@ -189,12 +199,13 @@ export async function createLogin(input: CreateLoginInput) {
 }
 
 /** Assign Role: replaces the user's full role set. */
-export async function assignRoles(actorId: string, userId: string, roleIds: string[]) {
+export async function assignRoles(actorId: string, userId: string, roleIds: string[], actorPermissions?: string[]) {
   const user = await prisma.$transaction(async (tx) => {
     await lockAdminGuard(tx);
     const current = await loadUser(tx, userId);
     const profileType = current.studentProfile ? 'STUDENT' : 'STAFF';
     const roles = await resolveRoles(tx, roleIds, profileType);
+    await assertCanAssign(tx, actorPermissions, roles.map((r) => r.id));
 
     if (!roles.some((r) => r.latinName === SYSTEM_ROLES.SYSTEM_ADMIN)) {
       await assertNotLastActiveAdmin(tx, current, 'remove the System Admin role');
@@ -246,24 +257,4 @@ export async function deleteLogin(actorId: string, userId: string) {
     await assertNotLastActiveAdmin(tx, current, 'delete this account');
     await tx.user.delete({ where: { id: userId } });
   });
-}
-
-export function listRoles() {
-  return prisma.role.findMany({
-    orderBy: { latinName: 'asc' },
-    include: { _count: { select: { rolePermissions: true, userRoles: true } } },
-  });
-}
-
-export async function getRole(id: string) {
-  const role = await prisma.role.findUnique({
-    where: { id },
-    include: {
-      rolePermissions: { include: { permission: true }, orderBy: { permission: { code: 'asc' } } },
-      _count: { select: { userRoles: true } },
-    },
-  });
-  if (!role) throw new HttpError(404, 'ROLE_NOT_FOUND', 'Role not found');
-  const { rolePermissions, ...rest } = role;
-  return { ...rest, permissions: rolePermissions.map((rp) => rp.permission) };
 }

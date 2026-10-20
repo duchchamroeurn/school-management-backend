@@ -53,14 +53,17 @@ export async function create(req: Request, res: Response) {
     roleIds: optionalStringArray(body.roleIds, 'roleIds'),
     temporaryPassword: optionalString(body.temporaryPassword, 'temporaryPassword', 72),
   };
-  const result = await userService.createLogin(staffId ? { ...common, staffId } : { ...common, studentId: studentId! });
+  const result = await userService.createLogin(
+    staffId ? { ...common, staffId } : { ...common, studentId: studentId! },
+    req.user!.permissions,
+  );
   res.status(201).json({ status: 'success', data: result });
 }
 
 // PUT /api/v1/users/:id/roles — Assign Role (replaces the full set)
 export async function assignRoles(req: Request<{ id: string }>, res: Response) {
   const roleIds = required(optionalStringArray(bodyOf(req).roleIds, 'roleIds'), 'roleIds');
-  res.json({ status: 'success', data: await userService.assignRoles(req.user!.id, req.params.id, roleIds) });
+  res.json({ status: 'success', data: await userService.assignRoles(req.user!.id, req.params.id, roleIds, req.user!.permissions) });
 }
 
 // PATCH /api/v1/users/:id/status — Suspend / reactivate
@@ -79,14 +82,4 @@ export async function resetPassword(req: Request<{ id: string }>, res: Response)
 export async function remove(req: Request<{ id: string }>, res: Response) {
   await userService.deleteLogin(req.user!.id, req.params.id);
   res.status(204).end();
-}
-
-// GET /api/v1/roles
-export async function listRoles(_req: Request, res: Response) {
-  res.json({ status: 'success', data: await userService.listRoles() });
-}
-
-// GET /api/v1/roles/:id
-export async function getRole(req: Request<{ id: string }>, res: Response) {
-  res.json({ status: 'success', data: await userService.getRole(req.params.id) });
 }
