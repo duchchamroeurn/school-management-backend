@@ -1,13 +1,11 @@
-import { EducationLevel } from '../generated/prisma/client';
+import { educationLevelOf as levelFor } from '../constants/school-levels';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../utils/httpError';
+import { assertGradeOffered } from './school-settings.service';
 
 // Secondary school only: grades 7–9 are lower secondary, 10–12 upper secondary
 export const MIN_GRADE = 7;
 export const MAX_GRADE = 12;
-
-const levelFor = (gradeNumber: number) =>
-  gradeNumber <= 9 ? EducationLevel.LOWER_SECONDARY : EducationLevel.UPPER_SECONDARY;
 
 const withCounts = { _count: { select: { classes: true, gradeSubjects: true } } } as const;
 
@@ -37,6 +35,7 @@ export async function getGrade(id: string) {
 }
 
 export async function createGrade(data: { gradeNumber: number }) {
+  await assertGradeOffered(data.gradeNumber);
   if (await prisma.grade.findUnique({ where: { gradeNumber: data.gradeNumber } })) {
     throw alreadyExists(data.gradeNumber);
   }
@@ -51,6 +50,7 @@ export async function updateGrade(id: string, data: { gradeNumber?: number }) {
   if (!grade) throw notFound();
 
   if (data.gradeNumber !== undefined && data.gradeNumber !== grade.gradeNumber) {
+    await assertGradeOffered(data.gradeNumber);
     if (await prisma.grade.findUnique({ where: { gradeNumber: data.gradeNumber } })) {
       throw alreadyExists(data.gradeNumber);
     }
