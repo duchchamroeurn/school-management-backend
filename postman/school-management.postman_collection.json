@@ -1,0 +1,2462 @@
+{
+  "info": {
+    "name": "School Management API",
+    "description": "MoEYS Secondary School Management System — local API.\n\n1. Select the **School Management – Local** environment and set `username` / `password`.\n2. Run **Auth → Login** — the token is saved to `accessToken` and sent automatically by every other request.\n3. If login returns `mustChangePassword: true`, set `newPassword` and run **Auth → Change password** first; every other route returns 403 until you do.\n\nCreate requests save the new id (`academicYearId`, `classSectionId`) for the Get/Update/Delete requests that follow. Running the whole collection creates a test academic year and class, then removes them in the **Delete** folder.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Health",
+      "description": "No authentication required.",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "description": "Login, forced password change and current user.",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Returns a JWT plus the user's roles and whether they have a staff/student profile. The token is saved to `accessToken`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json().data;",
+                  "pm.environment.set('accessToken', data.accessToken);",
+                  "if (data.mustChangePassword) console.warn('mustChangePassword is true — run Auth → Change password before anything else');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Current user with roles and effective permission codes. Returns 403 PASSWORD_CHANGE_REQUIRED until the password is changed."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Change password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"{{password}}\",\n  \"newPassword\": \"{{newPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/change-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "change-password"
+              ]
+            },
+            "description": "Set `newPassword` in the environment first. Policy: 8–72 chars with upper, lower, digit and symbol.\n\nOn success the new token is saved and `password` is updated to the new value. Tokens issued before the change stop working."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.environment.set('accessToken', pm.response.json().data.accessToken);",
+                  "  pm.environment.set('password', pm.environment.get('newPassword'));",
+                  "  pm.environment.set('newPassword', '');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Grades",
+      "description": "Permissions: `LIST_GRADES`, `VIEW_GRADE`, `CREATE_GRADE`, `UPDATE_GRADE`, `DELETE_GRADE`. Grades 7–12 are seeded; level is derived from the number.",
+      "item": [
+        {
+          "name": "List grades",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/grades",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "grades"
+              ]
+            },
+            "description": "Saves the first grade (Grade 7) as `gradeId` for the requests below."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const grades = pm.response.json().data;",
+                  "if (grades.length) pm.environment.set('gradeId', grades[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get grade (with subjects)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/grades/{{gradeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "grades",
+                "{{gradeId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create grade",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gradeNumber\": 12\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/grades",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "grades"
+              ]
+            },
+            "description": "gradeNumber must be 7–12. All six are seeded, so this returns 409 GRADE_EXISTS unless one was deleted."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201 or 409', () => pm.expect(pm.response.code).to.be.oneOf([201, 409]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update grade",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gradeNumber\": 7\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/grades/{{gradeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "grades",
+                "{{gradeId}}"
+              ]
+            },
+            "description": "Changing to a number that already exists returns 409 GRADE_EXISTS."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200 or 409', () => pm.expect(pm.response.code).to.be.oneOf([200, 409]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Subjects",
+      "description": "Permissions: `LIST_SUBJECTS`, `VIEW_SUBJECT`, `CREATE_SUBJECT`, `UPDATE_SUBJECT` (also for assigning to grades), `DELETE_SUBJECT`. The 13 MoEYS default subjects are seeded once; after that, edits and grade assignments made here are never overwritten by the seed.",
+      "item": [
+        {
+          "name": "List subjects",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/subjects",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subjects"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": "Code, Khmer or Latin name",
+                  "disabled": true
+                },
+                {
+                  "key": "gradeId",
+                  "value": "{{gradeId}}",
+                  "description": "Only subjects taught in this grade",
+                  "disabled": true
+                },
+                {
+                  "key": "isCoreSubject",
+                  "value": "true",
+                  "description": "true | false",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create subject",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{subjectCode}}\",\n  \"khmerName\": \"កសិកម្ម\",\n  \"latinName\": \"Agriculture\",\n  \"isCoreSubject\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/subjects",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subjects"
+              ]
+            },
+            "description": "`code` (e.g. MATH) is upper-cased, unique and permanent — 409 SUBJECT_CODE_EXISTS if taken. khmerName must be Khmer script, latinName Latin letters. isCoreSubject defaults to true (failing it means failing the year). Saves `subjectId`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) pm.environment.set('subjectId', pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get subject (with grades)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/subjects/{{subjectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subjects",
+                "{{subjectId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update subject",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latinName\": \"Agricultural Science\",\n  \"isCoreSubject\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/subjects/{{subjectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subjects",
+                "{{subjectId}}"
+              ]
+            },
+            "description": "Partial update of khmerName, latinName, isCoreSubject. code cannot be changed."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Assign subject to grades",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gradeIds\": [\n    \"{{gradeId}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/subjects/{{subjectId}}/grades",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subjects",
+                "{{subjectId}}",
+                "grades"
+              ]
+            },
+            "description": "Adds the subject to one or more grades. Grades that already have it are reported in `alreadyAssigned` (not an error). 404 GRADE_NOT_FOUND for unknown ids."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('reports assigned grades', () => pm.expect(pm.response.json().data).to.have.property('assigned'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unassign subject from grade",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/subjects/{{subjectId}}/grades/{{gradeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subjects",
+                "{{subjectId}}",
+                "grades",
+                "{{gradeId}}"
+              ]
+            },
+            "description": "Removes the subject from one grade. 404 NOT_ASSIGNED if it was not assigned."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Academic Years",
+      "description": "Permissions: `LIST_ACADEMIC_YEARS`, `VIEW_ACADEMIC_YEAR`, `CREATE_ACADEMIC_YEAR`, `UPDATE_ACADEMIC_YEAR`, `DELETE_ACADEMIC_YEAR`. Only one year can be ACTIVE at a time.",
+      "item": [
+        {
+          "name": "List academic years",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/academic-years",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "academic-years"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "ACTIVE",
+                  "description": "UPCOMING | ACTIVE | COMPLETED",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create academic year",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{yearName}}\",\n  \"startDate\": \"{{yearStartDate}}\",\n  \"endDate\": \"{{yearEndDate}}\",\n  \"status\": \"UPCOMING\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/academic-years",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "academic-years"
+              ]
+            },
+            "description": "name must be consecutive years (\"2026-2027\"); dates are YYYY-MM-DD. Saves `academicYearId`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) pm.environment.set('academicYearId', pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get academic year (with classes)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/academic-years/{{academicYearId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "academic-years",
+                "{{academicYearId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update academic year",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACTIVE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/academic-years/{{academicYearId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "academic-years",
+                "{{academicYearId}}"
+              ]
+            },
+            "description": "Partial update. Activating returns 409 ACTIVE_YEAR_EXISTS if another year is already ACTIVE. Setting COMPLETED locks its classes."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200 or 409', () => pm.expect(pm.response.code).to.be.oneOf([200, 409]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Class Sections",
+      "description": "Permissions: `LIST_CLASS_SECTIONS`, `VIEW_CLASS_SECTION`, `CREATE_CLASS_SECTION`, `UPDATE_CLASS_SECTION`, `DELETE_CLASS_SECTION`. Classes in a COMPLETED year are locked.",
+      "item": [
+        {
+          "name": "Create class section",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sectionName\": \"A\",\n  \"maxCapacity\": 45,\n  \"gradeId\": \"{{gradeId}}\",\n  \"academicYearId\": \"{{academicYearId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/class-sections",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "class-sections"
+              ]
+            },
+            "description": "Optional `homeroomTeacherId` (a staff profile id). Section names are upper-cased; duplicates per grade + year return 409 CLASS_SECTION_EXISTS. Saves `classSectionId`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) pm.environment.set('classSectionId', pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List class sections",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/class-sections",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "class-sections"
+              ],
+              "query": [
+                {
+                  "key": "academicYearId",
+                  "value": "{{academicYearId}}"
+                },
+                {
+                  "key": "gradeId",
+                  "value": "{{gradeId}}",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get class section",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/class-sections/{{classSectionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "class-sections",
+                "{{classSectionId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update class section",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sectionName\": \"B\",\n  \"maxCapacity\": 40\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/class-sections/{{classSectionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "class-sections",
+                "{{classSectionId}}"
+              ]
+            },
+            "description": "Partial update of sectionName, maxCapacity, homeroomTeacherId. Capacity cannot go below current enrollment. Grade and year cannot change."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Remove homeroom teacher",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"homeroomTeacherId\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/class-sections/{{classSectionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "class-sections",
+                "{{classSectionId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('teacher removed', () => pm.expect(pm.response.json().data.homeroomTeacher).to.be.null);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create second class section (for transfers)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sectionName\": \"C\",\n  \"maxCapacity\": 45,\n  \"gradeId\": \"{{gradeId}}\",\n  \"academicYearId\": \"{{academicYearId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/class-sections",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "class-sections"
+              ]
+            },
+            "description": "A second class in the same grade and year, used by Enrollments → Transfer. Saves `classSectionId2`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) pm.environment.set('classSectionId2', pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Staff",
+      "description": "Permissions: `LIST_STAFF`, `VIEW_STAFF`, `CREATE_STAFF`, `UPDATE_STAFF`, `DELETE_STAFF`. Assigning a homeroom needs `UPDATE_CLASS_SECTION`.",
+      "item": [
+        {
+          "name": "Create staff",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nationalIdNo\": \"{{nationalIdNo}}\",\n  \"khmerName\": \"ស្មីត ដារ៉ា\",\n  \"latinName\": \"Smith Dara\",\n  \"gender\": \"M\",\n  \"phone\": \"+855 12 345 678\",\n  \"telegramHandle\": \"smith_dara\",\n  \"hireDate\": \"2020-09-01\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/staff",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "staff"
+              ]
+            },
+            "description": "nationalIdNo (លេខអត្តសញ្ញាណប័ណ្ណ) is required and unique — set `nationalIdNo` in the environment to an ID not yet registered; Khmer digits and spaces are normalised (០១២ ៣៤៥ ៦៧៨ = 012345678). phone is normalised to local format (012345678); telegramHandle is stored with \"@\". hireDate cannot be in the future. Saves `staffId`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) pm.environment.set('staffId', pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create same staff again (expect 409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nationalIdNo\": \"{{nationalIdNo}}\",\n  \"khmerName\": \"ស្មីត ដារ៉ា\",\n  \"latinName\": \"Smith Dara\",\n  \"gender\": \"M\",\n  \"hireDate\": \"2020-09-01\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/staff",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "staff"
+              ]
+            },
+            "description": "Demonstrates duplicate prevention: the same national ID returns 409 DUPLICATE_STAFF naming the existing staff member."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));",
+                  "pm.test('DUPLICATE_STAFF', () => pm.expect(pm.response.json().code).to.eql('DUPLICATE_STAFF'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search staff by name",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/staff",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "staff"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "Smith",
+                  "description": "Khmer name, Latin name, national ID, phone or Telegram handle"
+                },
+                {
+                  "key": "gender",
+                  "value": "M",
+                  "description": "M | F",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Use this to look up a staffId from a name before assigning a homeroom."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get staff (with homeroom history)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/staff/{{staffId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "staff",
+                "{{staffId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update staff",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"097 765 4321\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/staff/{{staffId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "staff",
+                "{{staffId}}"
+              ]
+            },
+            "description": "Partial update. Send null to clear phone or telegramHandle."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Assign homeroom teacher",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"staffId\": \"{{staffId}}\",\n  \"classSectionId\": \"{{classSectionId}}\",\n  \"academicYear\": \"{{yearName}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/staff/assign-homeroom",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "staff",
+                "assign-homeroom"
+              ]
+            },
+            "description": "`classSectionId` is the homeroom class. `academicYear` is the year name (e.g. \"2026-2027\"); omit it to use the ACTIVE year. If the class already has a homeroom teacher they are replaced (`previousHomeroomTeacher` in the response). Errors: 409 TEACHER_ALREADY_ASSIGNED (one homeroom per teacher per year), 404 STAFF_NOT_FOUND / CLASS_SECTION_NOT_FOUND / ACADEMIC_YEAR_NOT_FOUND, 400 ACADEMIC_YEAR_MISMATCH, 409 ACADEMIC_YEAR_CLOSED."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('teacher assigned', () => pm.expect(pm.response.json().data.classSection.homeroomTeacher.id).to.eql(pm.environment.get('staffId')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Assign same teacher to a second class (expect 409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"staffId\": \"{{staffId}}\",\n  \"classSectionId\": \"{{classSectionId2}}\",\n  \"academicYear\": \"{{yearName}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/staff/assign-homeroom",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "staff",
+                "assign-homeroom"
+              ]
+            },
+            "description": "Demonstrates the rule: a teacher can be homeroom teacher of only one class per academic year."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));",
+                  "pm.test('TEACHER_ALREADY_ASSIGNED', () => pm.expect(pm.response.json().code).to.eql('TEACHER_ALREADY_ASSIGNED'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Students",
+      "description": "Permissions: `LIST_STUDENTS`, `VIEW_STUDENT`, `CREATE_STUDENT`, `UPDATE_STUDENT`, `DELETE_STUDENT`. Students leave via status DROPPED_OUT / GRADUATED; delete is only for records entered by mistake.",
+      "item": [
+        {
+          "name": "Register student",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"birthCertificateNo\": \"{{birthCertificateNo}}\",\n  \"khmerName\": \"សុខ ចាន់ថា\",\n  \"latinName\": \"Sok Chantha\",\n  \"dateOfBirth\": \"2013-04-14\",\n  \"gender\": \"F\",\n  \"primarySchoolOrigin\": \"Wat Phnom Primary School\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/students",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students"
+              ]
+            },
+            "description": "Set `birthCertificateNo` in the environment to a number not yet registered. birthCertificateNo (លេខសំបុត្រកំណើត) is required and unique — registering the same certificate again returns 409 DUPLICATE_STUDENT naming the existing student. Khmer digits are accepted (១២៣/២០១៣ = 123/2013). studentIdentifier (STU-YY-0001) is generated automatically. khmerName must be Khmer script, latinName Latin letters, gender M or F, age 8–30. Saves `studentId`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) pm.environment.set('studentId', pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List students",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/students",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "Sok",
+                  "description": "Khmer name, Latin name, student ID or birth certificate number"
+                },
+                {
+                  "key": "status",
+                  "value": "ENROLLED",
+                  "description": "ENROLLED | GRADUATED | DROPPED_OUT",
+                  "disabled": true
+                },
+                {
+                  "key": "gender",
+                  "value": "F",
+                  "description": "M | F",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "description": "1–100"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('has pagination meta', () => pm.expect(pm.response.json().meta).to.have.property('total'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get student (with enrollment history)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/students/{{studentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students",
+                "{{studentId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update student",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latinName\": \"Sok Chanthea\",\n  \"primarySchoolOrigin\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/students/{{studentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students",
+                "{{studentId}}"
+              ]
+            },
+            "description": "Partial update. studentIdentifier cannot be changed."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Enrollments",
+      "description": "Permissions: `LIST_ENROLLMENTS`, `VIEW_ENROLLMENT`, `CREATE_ENROLLMENT`, `UPDATE_ENROLLMENT`, `DELETE_ENROLLMENT`. Capacity is enforced under a row lock, so simultaneous requests can never overfill a class. Enrollments in a COMPLETED year are locked.",
+      "item": [
+        {
+          "name": "Enroll student (new admission)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"studentId\": \"{{studentId}}\",\n  \"classSectionId\": \"{{classSectionId}}\",\n  \"academicYearId\": \"{{academicYearId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/enrollments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "enrollments"
+              ]
+            },
+            "description": "Creates a NEW_ADMISSION enrollment. Errors: 400 CLASS_CAPACITY_REACHED (\"Class capacity reached.\"), 400 ACADEMIC_YEAR_MISMATCH, 409 ALREADY_ENROLLED (one class per year), 409 NOT_A_NEW_ADMISSION (student has earlier enrollments), 409 STUDENT_NOT_ACTIVE. Saves `enrollmentId`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) pm.environment.set('enrollmentId', pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List enrollments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/enrollments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "enrollments"
+              ],
+              "query": [
+                {
+                  "key": "academicYearId",
+                  "value": "{{academicYearId}}"
+                },
+                {
+                  "key": "classSectionId",
+                  "value": "{{classSectionId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "studentId",
+                  "value": "{{studentId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "description": "1–100"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get enrollment",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/enrollments/{{enrollmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "enrollments",
+                "{{enrollmentId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Class roster",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/class-sections/{{classSectionId}}/roster",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "class-sections",
+                "{{classSectionId}}",
+                "roster"
+              ]
+            },
+            "description": "Class list sorted by Khmer name with seat usage (maxCapacity, enrolled, seatsLeft, female, male). Needs `VIEW_CLASS_SECTION` + `LIST_ENROLLMENTS`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('has summary', () => pm.expect(pm.response.json().data.summary).to.have.property('seatsLeft'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Transfer to another class",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"classSectionId\": \"{{classSectionId2}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/enrollments/{{enrollmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "enrollments",
+                "{{enrollmentId}}"
+              ]
+            },
+            "description": "Moves the student to another class in the same academic year. The target class capacity is checked the same way as a new enrollment."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Student drops out (frees seat)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"DROPPED_OUT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/students/{{studentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students",
+                "{{studentId}}"
+              ]
+            },
+            "description": "How a student leaves the school — keeps their record and enrollment history; their seat no longer counts toward capacity."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Users & Roles",
+      "description": "Login accounts for staff and students. Permissions: `LIST_USERS`, `VIEW_USER`, `CREATE_USER`, `UPDATE_USER` (roles, suspend, reset password), `DELETE_USER`; roles: `LIST_ROLES`, `VIEW_ROLE`. Every login belongs to exactly one staff OR student profile. New logins and password resets always set mustChangePassword: true.",
+      "item": [
+        {
+          "name": "List roles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles"
+              ]
+            },
+            "description": "Saves `teacherRoleId` and `registrarRoleId` for the requests below."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const roles = pm.response.json().data;",
+                  "const id = (name) => (roles.find((r) => r.latinName === name) || {}).id;",
+                  "pm.environment.set('teacherRoleId', id('Teacher'));",
+                  "pm.environment.set('registrarRoleId', id('Registrar'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get role (with permissions)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/roles/{{teacherRoleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles",
+                "{{teacherRoleId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create staff login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{staffUsername}}\",\n  \"staffId\": \"{{staffId}}\",\n  \"roleIds\": [\n    \"{{teacherRoleId}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ]
+            },
+            "description": "Create Login for a staff profile. Exactly one of `staffId` / `studentId` is required (no orphan accounts, no shared logins). Staff need at least one role; the Student role is reserved for students. Optional `temporaryPassword`; when omitted one is generated and returned ONCE in the response (saved to `temporaryPassword`). mustChangePassword is always true. Saves `userId`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.environment.set('userId', data.user.id);",
+                  "  pm.environment.set('temporaryPassword', data.temporaryPassword);",
+                  "  pm.test('mustChangePassword is true', () => pm.expect(data.mustChangePassword).to.eql(true));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create second login for same staff (expect 409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{staffUsername}}.2\",\n  \"staffId\": \"{{staffId}}\",\n  \"roleIds\": [\n    \"{{teacherRoleId}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ]
+            },
+            "description": "Demonstrates the 1:1 rule: a profile can have only one login → 409 PROFILE_HAS_LOGIN."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));",
+                  "pm.test('PROFILE_HAS_LOGIN', () => pm.expect(pm.response.json().code).to.eql('PROFILE_HAS_LOGIN'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create student login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{studentUsername}}\",\n  \"studentId\": \"{{studentId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ]
+            },
+            "description": "Student logins always get the Student role (roleIds may be omitted). Saves `studentUserId`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) pm.environment.set('studentUserId', pm.response.json().data.user.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": "Username or profile name",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "ACTIVE",
+                  "description": "ACTIVE | SUSPENDED",
+                  "disabled": true
+                },
+                {
+                  "key": "roleId",
+                  "value": "{{teacherRoleId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get user",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{userId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Assign roles",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleIds\": [\n    \"{{teacherRoleId}}\",\n    \"{{registrarRoleId}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{userId}}",
+                "roles"
+              ]
+            },
+            "description": "Replaces the full role set. The last active System Admin cannot lose that role, and you cannot remove it from yourself."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Suspend account",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"SUSPENDED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{userId}}",
+                "status"
+              ]
+            },
+            "description": "Takes effect immediately: existing tokens get 401 and login returns 403 ACCOUNT_SUSPENDED. You cannot suspend yourself or the last active System Admin."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reactivate account",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACTIVE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{userId}}",
+                "status"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reset password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{userId}}",
+                "reset-password"
+              ]
+            },
+            "description": "Generates a new temporary password (or send `temporaryPassword`), sets mustChangePassword: true and revokes all existing tokens. The new password is returned once and saved to `temporaryPassword`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) pm.environment.set('temporaryPassword', pm.response.json().data.temporaryPassword);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Delete",
+      "description": "Deletes run last so the requests above have data to work with. Records still in use return 409.",
+      "item": [
+        {
+          "name": "Delete enrollment",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/enrollments/{{enrollmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "enrollments",
+                "{{enrollmentId}}"
+              ]
+            },
+            "description": "For enrollments made by mistake. Not allowed in a COMPLETED year."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete student login",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{studentUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{studentUserId}}"
+              ]
+            },
+            "description": "Removes the login only; the student profile is kept. Must run before deleting the student (409 STUDENT_HAS_LOGIN otherwise)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete staff login",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{userId}}"
+              ]
+            },
+            "description": "Removes the login only; the staff profile is kept. You cannot delete your own login or the last active System Admin."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete student",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/students/{{studentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students",
+                "{{studentId}}"
+              ]
+            },
+            "description": "Mistaken entries only (System Admin / Principal). Returns 409 STUDENT_HAS_HISTORY if the student has enrollments — set status DROPPED_OUT instead."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete class section",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/class-sections/{{classSectionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "class-sections",
+                "{{classSectionId}}"
+              ]
+            },
+            "description": "Returns 409 CLASS_SECTION_IN_USE if students are enrolled."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete second class section",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/class-sections/{{classSectionId2}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "class-sections",
+                "{{classSectionId2}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete staff",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/staff/{{staffId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "staff",
+                "{{staffId}}"
+              ]
+            },
+            "description": "Returns 409 STAFF_HAS_HOMEROOM while they are homeroom teacher of a class, or 409 STAFF_HAS_LOGIN if they have a login."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete academic year",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/academic-years/{{academicYearId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "academic-years",
+                "{{academicYearId}}"
+              ]
+            },
+            "description": "Returns 409 ACADEMIC_YEAR_IN_USE if it still has classes or enrollments."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete subject",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/subjects/{{subjectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subjects",
+                "{{subjectId}}"
+              ]
+            },
+            "description": "Returns 409 SUBJECT_IN_USE while the subject is assigned to any grade — unassign it first."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete grade",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('gradeIdToDelete')) pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/grades/{{gradeIdToDelete}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "grades",
+                "{{gradeIdToDelete}}"
+              ]
+            },
+            "description": "⚠️ Removes a seeded grade and its subject links. Skipped unless you set `gradeIdToDelete`. Returns 409 GRADE_IN_USE if it has classes; re-run `npm run db:seed` to restore subject links."
+          }
+        }
+      ]
+    }
+  ]
+}
