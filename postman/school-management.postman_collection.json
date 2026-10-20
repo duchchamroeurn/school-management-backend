@@ -2507,8 +2507,8 @@
       ]
     },
     {
-      "name": "Teaching Assignments",
-      "description": "Who teaches which subject in which class. Teachers can only enter scores for their own assignments (unless they hold ENTER_ANY_SCORES).",
+      "name": "Subject Teachers",
+      "description": "Who teaches which subject in which class (SubjectTeacherAssignment). Needs UPDATE_CLASS_SECTION or UPDATE_STAFF (Academic Coordinator), except My teaching assignments. Teachers can only enter scores for their own assignments.",
       "item": [
         {
           "name": "Assign teacher to subject in class",
@@ -2521,12 +2521,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/teaching-assignments",
+              "raw": "{{baseUrl}}/assignments/subject-teacher",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "teaching-assignments"
+                "assignments",
+                "subject-teacher"
               ]
             },
             "description": "One teacher per subject per class (409 SUBJECT_ALREADY_TAUGHT otherwise). The subject must be taught in the class's grade.",
@@ -2554,17 +2555,49 @@
           ]
         },
         {
+          "name": "Class subject teachers (vacancies)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/assignments/class/{{classSectionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "assignments",
+                "class",
+                "{{classSectionId}}"
+              ]
+            },
+            "description": "Every subject of the class's grade with its assigned teacher, or teacher: null when vacant, plus summary { subjects, assigned, vacant }."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('has summary', () => pm.expect(pm.response.json().data.summary).to.have.property('vacant'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "List teaching assignments",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/teaching-assignments",
+              "raw": "{{baseUrl}}/assignments/subject-teacher",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "teaching-assignments"
+                "assignments",
+                "subject-teacher"
               ],
               "query": [
                 {
@@ -2609,12 +2642,13 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/teaching-assignments/{{teachingAssignmentId}}",
+              "raw": "{{baseUrl}}/assignments/subject-teacher/{{teachingAssignmentId}}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "teaching-assignments",
+                "assignments",
+                "subject-teacher",
                 "{{teachingAssignmentId}}"
               ]
             },
@@ -2643,12 +2677,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/teaching-assignments/{{teachingAssignmentId}}",
+              "raw": "{{baseUrl}}/assignments/subject-teacher/{{teachingAssignmentId}}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "teaching-assignments",
+                "assignments",
+                "subject-teacher",
                 "{{teachingAssignmentId}}"
               ]
             },
@@ -2710,12 +2745,13 @@
             "method": "DELETE",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/teaching-assignments/{{teachingAssignmentId}}",
+              "raw": "{{baseUrl}}/assignments/subject-teacher/{{teachingAssignmentId}}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "teaching-assignments",
+                "assignments",
+                "subject-teacher",
                 "{{teachingAssignmentId}}"
               ]
             },

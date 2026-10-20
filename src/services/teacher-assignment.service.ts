@@ -2,6 +2,7 @@
 // for an academic year. A teacher can hold many (several subjects, several classes); each subject in a class
 // has exactly one teacher per year. Score entry only accepts scores from the assigned teacher (or users with
 // ENTER_ANY_SCORES). The API calls the teacher `staffId`, like the rest of the API; the column is staffProfileId.
+// Managed by the Academic Coordinator (UPDATE_CLASS_SECTION or UPDATE_STAFF) under /api/v1/assignments.
 import { Errors } from '../constants/errors';
 import { AcademicYearStatus, Prisma } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
@@ -169,4 +170,48 @@ export async function listOwnTeachingAssignments(userId: string, academicYearNam
     throw academicYearName ? Errors.ACADEMIC_YEAR_NOT_FOUND(academicYearName) : Errors.ACADEMIC_YEAR_REQUIRED();
   }
   return listTeachingAssignments({ staffId: staff.id, academicYearId: academicYear.id });
+}
+
+/**
+ * Staffing overview of one class: every subject taught in its grade, with the teacher assigned to it,
+ * or teacher: null when the subject has no teacher yet. Core subjects first, then by code.
+ */
+export async function getClassSubjectTeachers(classSectionId: string) {
+  const classSection = await prisma.classSection.findUnique({
+    where: { id: classSectionId },
+    include: {
+      grade: {
+        include: {
+          gradeSubjects: {
+            include: { subject: { select: { id: true, code: true, khmerName: true, latinName: true, isCoreSubject: true } } },
+            orderBy: [{ subject: { isCoreSubject: 'desc' } }, { subject: { code: 'asc' } }],
+          },
+        },
+      },
+      academicYear: { select: { id: true, name: true, status: true } },
+      homeroomTeacher: { select: { id: true, khmerName: true, latinName: true } },
+      subjectTeacherAssignments: { include: { staffProfile: { select: { id: true, khmerName: true, latinName: true } } } },
+    },
+  });
+  if (!classSection) throw Errors.CLASS_SECTION_NOT_FOUND();
+
+  const bySubject = new Map(classSection.subjectTeacherAssignments.map((a) => [a.subjectId, a]));
+  const subjects = classSection.grade.gradeSubjects.map(({ subject }) => {
+    const assignment = bySubject.get(subject.id);
+    return { subject, assignmentId: assignment?.id ?? null, teacher: assignment?.staffProfile ?? null };
+  });
+  const assigned = subjects.filter((s) => s.teacher).length;
+
+  return {
+    classSection: {
+      id: classSection.id,
+      name: `${classSection.grade.gradeNumber}${classSection.sectionName}`,
+      sectionName: classSection.sectionName,
+      grade: { id: classSection.grade.id, gradeNumber: classSection.grade.gradeNumber },
+      academicYear: classSection.academicYear,
+      homeroomTeacher: classSection.homeroomTeacher,
+    },
+    summary: { subjects: subjects.length, assigned, vacant: subjects.length - assigned },
+    subjects,
+  };
 }

@@ -15,3 +15,16 @@ export const requirePermission =
     }
     next();
   };
+
+// Use after authenticate(). The user must hold AT LEAST ONE of the listed permission codes.
+export const requireAnyPermission =
+  (...codes: PermissionCode[]) =>
+  (req: Request, _res: Response, next: NextFunction) => {
+    if (!req.user) {
+      throw Errors.AUTH_REQUIRED();
+    }
+    if (!codes.some((code) => req.user!.permissions.includes(code))) {
+      throw Errors.FORBIDDEN_ANY(codes);
+    }
+    next();
+  };

@@ -25,7 +25,7 @@ const SYSTEM_ADMIN_ROLE = 'System Admin';
 const { USER, ROLE, STUDENT } = PERMISSIONS;
 const OWN_PROFILE = PERMISSIONS.SELF_SERVICE.VIEW_OWN_PROFILE;
 const OWN_HOMEROOM = PERMISSIONS.SELF_SERVICE.VIEW_OWN_HOMEROOM;
-const ACADEMIC_REFERENCE = ['SUBJECT', 'GRADE', 'ACADEMIC_YEAR', 'CLASS_SECTION', 'TEACHING_ASSIGNMENT'] as const;
+const ACADEMIC_REFERENCE = ['SUBJECT', 'GRADE', 'ACADEMIC_YEAR', 'CLASS_SECTION'] as const;
 
 // isSystemDefault = true: the API must block renaming/deleting these and editing their permissions.
 // The seed re-syncs their permissions to exactly this list on every run.

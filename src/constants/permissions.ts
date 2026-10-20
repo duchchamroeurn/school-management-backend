@@ -12,7 +12,6 @@ const RESOURCES = {
   GRADE: { module: 'ACADEMIC', plural: 'GRADES', label: 'grade levels' },
   ACADEMIC_YEAR: { module: 'ACADEMIC', plural: 'ACADEMIC_YEARS', label: 'academic years' },
   CLASS_SECTION: { module: 'ACADEMIC', plural: 'CLASS_SECTIONS', label: 'class sections' },
-  TEACHING_ASSIGNMENT: { module: 'ACADEMIC', plural: 'TEACHING_ASSIGNMENTS', label: 'teaching assignments (who teaches which subject in which class)' },
   ENROLLMENT: { module: 'ENROLLMENT', plural: 'ENROLLMENTS', label: 'enrollments' },
 } as const;
 

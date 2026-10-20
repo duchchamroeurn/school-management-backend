@@ -17,7 +17,7 @@ import { createClassSection } from '../services/class-section.service';
 import { enrollContinuingStudent, enrollStudentInClass } from '../services/enrollment.service';
 import { getSchoolLevel } from '../services/school-settings.service';
 import { assignHomeroom } from '../services/staff.service';
-import { createTeachingAssignment } from '../services/teaching-assignment.service';
+import { createTeachingAssignment } from '../services/teacher-assignment.service';
 import { updateStudent } from '../services/student.service';
 import { createLogin, setStatus } from '../services/user.service';
 import { hashPassword } from './password';

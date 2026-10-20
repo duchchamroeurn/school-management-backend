@@ -216,7 +216,7 @@ All routes are prefixed with `/api/v1`. Except for `/health` and `/auth/login`, 
 | Grades | CRUD on `/grades` |
 | Subjects | CRUD on `/subjects`, plus `POST /subjects/:id/grades` and `DELETE /subjects/:id/grades/:gradeId` |
 | Class sections | CRUD on `/class-sections`, plus `GET /class-sections/:id/roster` |
-| Teaching assignments | CRUD on `/teaching-assignments` (`PATCH` takes `{ staffId }` to hand the subject to another teacher) |
+| Subject teachers | `GET /assignments/class/:classSectionId`, plus CRUD on `/assignments/subject-teacher` (`PATCH` takes `{ staffId }` to hand the subject to another teacher) |
 | Enrollments | CRUD on `/enrollments` |
 
 "CRUD" means `GET /`, `GET /:id`, `POST /`, `PATCH /:id` and `DELETE /:id`.
@@ -240,7 +240,9 @@ These endpoints always use the signed-in login's own profile, never an id from t
 **Who can enter scores:** a teacher can teach several subjects in several classes. Each assignment links a teacher, a subject and a class, and each subject in a class has one teacher.
 - **Teachers** (`ENTER_SCORES`) can only score the subjects they're assigned to, in the classes they're assigned to. For anything else they get `403 NOT_TEACHING_SUBJECT`.
 - **Principal and System Admin** also hold `ENTER_ANY_SCORES`, so they can score any subject in any class, for example to fix a mistake. Every change is audited either way.
-- **Managing assignments:** Principal and System Admin assign teachers with `POST /teaching-assignments { staffId, subjectId, classSectionId }`. The subject must be taught in that class's grade, and the year must not be completed.
+- **Managing assignments:** the Academic Coordinator manages assignments. That means anyone holding `UPDATE_CLASS_SECTION` or `UPDATE_STAFF`, which today is Principal and System Admin.
+  - `GET /assignments/class/:classSectionId` lists every subject of the class's grade with its teacher, or `teacher: null` if the subject is vacant, plus a count of assigned and vacant subjects.
+  - `POST /assignments/subject-teacher { staffId, subjectId, classSectionId }` assigns a teacher. The subject must be taught in that class's grade, and the year must not be completed.
 - **A teacher's own list:** teachers see their assignments with `GET /me/teaching-assignments`.
 
 How the subject is scored depends on that period's `SubjectAssessmentConfig`, so the same subject can follow different rules from month to month:

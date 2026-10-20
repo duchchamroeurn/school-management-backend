@@ -56,6 +56,10 @@ const ERROR_DEFS = {
   AUTH_REQUIRED: def(401, 'Authentication required', { code: 'UNAUTHENTICATED' }),
   PASSWORD_CHANGE_REQUIRED: def(403, 'You must change your password before continuing'),
   FORBIDDEN: def(403, 'You do not have permission to perform this action', { details: (missing: string[]) => ({ missing }) }),
+  FORBIDDEN_ANY: def(403, 'You do not have permission to perform this action', {
+    code: 'FORBIDDEN',
+    details: (anyOf: string[]) => ({ requiresAnyOf: anyOf }),
+  }),
   CREDENTIALS_REQUIRED: def(400, 'username and password are required', { code: 'VALIDATION_ERROR' }),
   PASSWORDS_REQUIRED: def(400, 'currentPassword and newPassword are required', { code: 'VALIDATION_ERROR' }),
   INVALID_CREDENTIALS: def(401, 'Invalid username or password'),
