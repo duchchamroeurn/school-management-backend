@@ -22,6 +22,10 @@ services:
       context: .
       target: build
     command: ["sh", "-c", "npx prisma db push --config prisma7.config.ts && npx prisma db seed --config prisma7.config.ts"]
+    # All settings from .env (SCHOOL_LEVEL, SEED_ADMIN_*, …); the values under environment override them
+    env_file:
+      - path: .env
+        required: false
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-school}:${POSTGRES_PASSWORD:-school}@db:5432/${POSTGRES_DB:-school_management}
       SEED_ADMIN_USERNAME: ${SEED_ADMIN_USERNAME:-admin}
@@ -35,6 +39,10 @@ services:
       context: .
       target: runtime
     restart: unless-stopped
+    # All settings from .env (JWT_EXPIRES_IN, LOGIN_*, …); the values under environment override them
+    env_file:
+      - path: .env
+        required: false
     environment:
       PORT: 3000
       DATABASE_URL: postgresql://${POSTGRES_USER:-school}:${POSTGRES_PASSWORD:-school}@db:5432/${POSTGRES_DB:-school_management}

@@ -1,7 +1,7 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import dotenv from 'dotenv';
+import { config } from './config/env';
 import academicYearRoutes from './routes/academic-year.routes';
 import authRoutes from './routes/auth.routes';
 import classSectionRoutes from './routes/class-section.routes';
@@ -15,23 +15,13 @@ import { permissionRoutes, roleRoutes } from './routes/role.routes';
 import { userRoutes } from './routes/user.routes';
 import { errorHandler, notFound } from './middlewares/errorHandler';
 
-dotenv.config();
-
 const app: Application = express();
-
-// Browser origins allowed to call the API, e.g. CORS_ORIGINS=https://school.example.com,http://localhost:5173.
-// Other websites get no CORS headers, so browsers block them. Non-browser clients (Postman, curl) are unaffected.
-const corsOrigins = (process.env.CORS_ORIGINS ?? '')
-  .split(',')
-  .map((origin) => origin.trim().replace(/\/+$/, '')) // browsers send origins without a trailing slash
-  .filter(Boolean);
-if (corsOrigins.length === 0) {
-  throw new Error('CORS_ORIGINS is not set: list the frontend address(es) allowed to call the API');
-}
 
 // Global Middlewares
 app.use(helmet());
-app.use(cors({ origin: corsOrigins }));
+// Only the frontend origins in CORS_ORIGINS get CORS headers, so browsers block other websites.
+// Non-browser clients (Postman, curl) are unaffected.
+app.use(cors({ origin: config.corsOrigins }));
 app.use(express.json());
 
 // Health Check Route

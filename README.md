@@ -47,25 +47,29 @@ npm install
 
 ### 2. Configure environment
 
-Create a `.env` file in the project root:
+Copy the example file, then set a real `JWT_SECRET` and your frontend's address in `CORS_ORIGINS`:
 
-```env
-DATABASE_URL=postgresql://school:school@localhost:5432/school_management
-JWT_SECRET=change-me-to-a-long-random-string
-CORS_ORIGINS=http://localhost:5173
+```sh
+cp .env.example .env
+openssl rand -base64 48   # paste the output into JWT_SECRET
 ```
+
+[.env.example](.env.example) documents every setting. The API checks them at startup and exits with a list of problems if a required value is missing or invalid. It also exits if it can't connect to `DATABASE_URL`.
 
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
-| `DATABASE_URL` | Yes | | PostgreSQL connection string |
-| `JWT_SECRET` | Yes | | Secret used to sign access tokens |
+| `DATABASE_URL` | Yes | | PostgreSQL connection string (`postgresql://…`) |
+| `JWT_SECRET` | Yes | | Secret used to sign access tokens: at least 32 random characters |
 | `CORS_ORIGINS` | Yes | | Comma-separated frontend origins allowed to call the API from a browser, e.g. `https://school.example.com,http://localhost:5173` |
-| `JWT_EXPIRES_IN` | No | `8h` | Access token lifetime |
+| `JWT_EXPIRES_IN` | No | `8h` | Access token lifetime, with a unit (`30m`, `8h`, `7d`) |
 | `PORT` | No | `3000` | API port |
+| `NODE_ENV` | No | | Set to `production` to block the demo scripts |
 | `LOGIN_MAX_FAILURES` | No | `5` | Failed logins in a row before a username is locked |
 | `LOGIN_LOCK_MINUTES` | No | `15` | How long a locked username stays locked |
 | `LOGIN_IP_MAX_FAILURES` | No | `30` | Failed logins from one IP before that IP is blocked |
 | `LOGIN_IP_WINDOW_MINUTES` | No | `15` | Window for `LOGIN_IP_MAX_FAILURES` |
+| `SCHOOL_LEVEL` | No | `COMBINED` | `LOWER_SECONDARY`, `UPPER_SECONDARY` or `COMBINED`. Used on first install only |
+| `SCHOOL_KHMER_NAME` / `SCHOOL_LATIN_NAME` | No | | School name. Used on first install only |
 | `SEED_ADMIN_USERNAME` | No | `admin` | Username of the seeded root admin |
 | `SEED_ADMIN_PASSWORD` | No | `Admin@123!` | Initial password of the seeded root admin |
 | `DEMO_PASSWORD` | No | `Demo@1234` | Password for demo accounts (`db:seed:demo`) |
@@ -106,8 +110,7 @@ Failed logins are throttled. After `LOGIN_MAX_FAILURES` wrong passwords in a row
 ## Running with Docker
 
 ```sh
-echo "JWT_SECRET=change-me-to-a-long-random-string" > .env
-echo "CORS_ORIGINS=http://localhost:5173" >> .env
+cp .env.example .env     # then set JWT_SECRET and CORS_ORIGINS
 docker compose up --build
 ```
 
@@ -117,7 +120,7 @@ This starts three services:
 - **migrate**: a one-off job that pushes the schema and seeds default data, then exits
 - **api**: the API on port `3000` (override with `API_PORT`), started once `migrate` succeeds
 
-You can also set `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `SEED_ADMIN_USERNAME` and `SEED_ADMIN_PASSWORD` in `.env`.
+The containers read all settings from `.env`. Compose builds `DATABASE_URL` from `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB`, so the `DATABASE_URL` in `.env` is only used outside Docker.
 
 ## Scripts
 

@@ -7,17 +7,13 @@
 //
 // State is kept in memory: fine for this single-process server. Move it to Redis or the database if the API
 // ever runs as several instances.
+import { config } from '../config/env';
 import { Errors } from '../constants/errors';
 
-const positiveInt = (value: string | undefined, fallback: number) => {
-  const n = Number(value);
-  return Number.isInteger(n) && n > 0 ? n : fallback;
-};
-
-const IP_MAX_FAILURES = positiveInt(process.env.LOGIN_IP_MAX_FAILURES, 30);
-const IP_WINDOW_MS = positiveInt(process.env.LOGIN_IP_WINDOW_MINUTES, 15) * 60_000;
-const MAX_FAILURES = positiveInt(process.env.LOGIN_MAX_FAILURES, 5);
-const LOCK_MS = positiveInt(process.env.LOGIN_LOCK_MINUTES, 15) * 60_000;
+const IP_MAX_FAILURES = config.login.ipMaxFailures;
+const IP_WINDOW_MS = config.login.ipWindowMinutes * 60_000;
+const MAX_FAILURES = config.login.maxFailures;
+const LOCK_MS = config.login.lockMinutes * 60_000;
 
 interface Counter {
   failures: number;
