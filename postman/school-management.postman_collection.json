@@ -467,7 +467,7 @@
                 "grades"
               ]
             },
-            "description": "gradeNumber must be 7–12. All six are seeded, so this returns 409 GRADE_EXISTS unless one was deleted."
+            "description": "gradeNumber must be within the school level (see School Settings). Seeded grades already exist, so this returns 409 GRADE_EXISTS — or 400 GRADE_NOT_OFFERED when the number is outside the school's level (e.g. 12 on a lower-secondary school)."
           },
           "event": [
             {
@@ -475,7 +475,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('status 201 or 409', () => pm.expect(pm.response.code).to.be.oneOf([201, 409]));"
+                  "pm.test('status 201, 400 or 409', () => pm.expect(pm.response.code).to.be.oneOf([201, 400, 409]));"
                 ]
               }
             }
@@ -1887,6 +1887,444 @@
               }
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "Attendance & Leave",
+      "description": "Daily attendance (subjectId null) is taken by the class's homeroom teacher; subject attendance by that subject's assigned teacher. Permissions: `MARK_ATTENDANCE` / `VIEW_ATTENDANCE` (own classes), `MARK_ANY_ATTENDANCE` / `VIEW_ANY_ATTENDANCE` (any class); leave: `LIST_LEAVE_REQUESTS`, `CREATE_LEAVE_REQUEST`, `REVIEW_LEAVE_REQUEST`. The date must be inside the class's academic year and not in the future (Cambodia time) — use a class in a year that has started. `attendanceDate` defaults to today.",
+      "item": [
+        {
+          "name": "Create leave request",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('attendanceDate')) pm.environment.set('attendanceDate', new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' }).format(new Date()));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) pm.environment.set('leaveRequestId', pm.response.json().data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"studentId\": \"{{studentId}}\",\n  \"startDate\": \"{{attendanceDate}}\",\n  \"endDate\": \"{{attendanceDate}}\",\n  \"reason\": \"គ្រុនក្តៅ (fever)\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/leave-requests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "leave-requests"
+              ]
+            },
+            "description": "Recorded as PENDING. startDate/endDate inclusive, at most 90 days; 409 LEAVE_OVERLAP if it overlaps a pending/approved request of the same student. Saves `leaveRequestId`."
+          }
+        },
+        {
+          "name": "List leave requests",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/leave-requests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "leave-requests"
+              ],
+              "query": [
+                {
+                  "key": "studentId",
+                  "value": "{{studentId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "PENDING",
+                  "description": "PENDING | APPROVED | REJECTED | CANCELLED",
+                  "disabled": true
+                },
+                {
+                  "key": "from",
+                  "value": "{{attendanceDate}}",
+                  "description": "leave overlapping from–to",
+                  "disabled": true
+                },
+                {
+                  "key": "to",
+                  "value": "{{attendanceDate}}",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get leave request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/leave-requests/{{leaveRequestId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "leave-requests",
+                "{{leaveRequestId}}"
+              ]
+            },
+            "description": "Includes excusedAbsences: attendance records this leave excused."
+          }
+        },
+        {
+          "name": "Approve leave request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/leave-requests/{{leaveRequestId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "leave-requests",
+                "{{leaveRequestId}}",
+                "approve"
+              ]
+            },
+            "description": "PENDING → APPROVED (needs REVIEW_LEAVE_REQUEST, e.g. Principal). Also excuses ABSENT_UNEXCUSED records already saved in the range (response: excusedAbsences). 409 LEAVE_STATUS_INVALID otherwise."
+          }
+        },
+        {
+          "name": "Attendance sheet (class, date)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('attendanceDate')) pm.environment.set('attendanceDate', new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' }).format(new Date()));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/attendance/class-sections/{{classSectionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attendance",
+                "class-sections",
+                "{{classSectionId}}"
+              ],
+              "query": [
+                {
+                  "key": "date",
+                  "value": "{{attendanceDate}}"
+                },
+                {
+                  "key": "subjectId",
+                  "value": "{{subjectId}}",
+                  "description": "omit for daily attendance",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Every active student with status (null = not marked yet) and approvedLeave covering that date, so a screen can pre-fill. Teachers see only classes they teach (403 NOT_CLASS_TEACHER)."
+          }
+        },
+        {
+          "name": "Mark daily attendance",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('attendanceDate')) pm.environment.set('attendanceDate', new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' }).format(new Date()));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"classSectionId\": \"{{classSectionId}}\",\n  \"date\": \"{{attendanceDate}}\",\n  \"records\": [\n    {\n      \"studentId\": \"{{studentId}}\",\n      \"status\": \"ABSENT_UNEXCUSED\",\n      \"remarks\": null\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/attendance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attendance"
+              ]
+            },
+            "description": "Homeroom teacher (or MARK_ANY_ATTENDANCE). status: PRESENT | LATE | ABSENT_UNEXCUSED | ABSENT_EXCUSED. ABSENT_UNEXCUSED is saved as ABSENT_EXCUSED when the student has approved leave that day (excusedByLeave: true). Sending again corrects the records."
+          }
+        },
+        {
+          "name": "Mark subject attendance",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('attendanceDate')) pm.environment.set('attendanceDate', new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' }).format(new Date()));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"classSectionId\": \"{{classSectionId}}\",\n  \"date\": \"{{attendanceDate}}\",\n  \"subjectId\": \"{{subjectId}}\",\n  \"records\": [\n    {\n      \"studentId\": \"{{studentId}}\",\n      \"status\": \"PRESENT\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/attendance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attendance"
+              ]
+            },
+            "description": "The subject's assigned teacher (or MARK_ANY_ATTENDANCE). Kept separately from daily attendance."
+          }
+        },
+        {
+          "name": "Student attendance history",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('attendanceDate')) pm.environment.set('attendanceDate', new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' }).format(new Date()));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/attendance/students/{{studentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attendance",
+                "students",
+                "{{studentId}}"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "2026-11-01"
+                },
+                {
+                  "key": "to",
+                  "value": "{{attendanceDate}}"
+                }
+              ]
+            },
+            "description": "Needs VIEW_ANY_ATTENDANCE. At most one year. dailyTotals count daily attendance only."
+          }
+        },
+        {
+          "name": "Cancel leave request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/leave-requests/{{leaveRequestId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "leave-requests",
+                "{{leaveRequestId}}",
+                "cancel"
+              ]
+            },
+            "description": "PENDING or APPROVED → CANCELLED. For an approved leave, the absences it excused become ABSENT_UNEXCUSED again (response: revertedAbsences)."
+          }
+        },
+        {
+          "name": "Reject leave request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200 or 409', () => pm.expect(pm.response.code).to.be.oneOf([200, 409]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/leave-requests/{{leaveRequestId}}/reject",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "leave-requests",
+                "{{leaveRequestId}}",
+                "reject"
+              ]
+            },
+            "description": "PENDING → REJECTED. (Returns 409 here because the request above was already cancelled — create a new one to try it.)"
+          }
         }
       ]
     },
