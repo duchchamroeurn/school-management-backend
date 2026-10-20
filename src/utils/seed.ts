@@ -56,6 +56,7 @@ const ROLES: { latinName: string; khmerName: string; permissions: PermissionCode
       ATTENDANCE.VIEW_ANY,
       LEAVE_REQUEST.LIST,
       LEAVE_REQUEST.CREATE,
+      PERMISSIONS.REPORT_CARD.VIEW_ANY,
       OWN_PROFILE,
     ],
   },
@@ -71,6 +72,9 @@ const ROLES: { latinName: string; khmerName: string; permissions: PermissionCode
       ATTENDANCE.VIEW,
       LEAVE_REQUEST.LIST,
       LEAVE_REQUEST.CREATE,
+      // Homeroom teachers calculate and print their own class's results
+      PERMISSIONS.RESULT.CALCULATE,
+      PERMISSIONS.REPORT_CARD.VIEW,
     ],
   },
   { latinName: 'Student', khmerName: 'សិស្ស', permissions: [OWN_PROFILE] },

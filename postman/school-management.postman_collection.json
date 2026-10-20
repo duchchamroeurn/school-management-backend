@@ -3402,6 +3402,180 @@
       ]
     },
     {
+      "name": "Reports",
+      "description": "MoEYS reports in Khmer. ?format=json (default) | html (printable A4; print or save as PDF from the browser) | xlsx. Report cards need POST /scores/results/calculate first.",
+      "item": [
+        {
+          "name": "Calculate period results",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"classSectionId\": \"{{classSectionId}}\",\n  \"assessmentPeriodId\": \"{{assessmentPeriodId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/scores/results/calculate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "scores",
+                "results",
+                "calculate"
+              ]
+            },
+            "description": "Total, average (% of max), mention A–F and class rank for every active student. 409 SCORES_INCOMPLETE lists missing scores. Homeroom teacher (CALCULATE_RESULTS) or CALCULATE_ANY_RESULTS."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Report cards",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/reports/report-cards/{{classSectionId}}?assessmentPeriodId={{assessmentPeriodId}}&format=html",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reports",
+                "report-cards",
+                "{{classSectionId}}"
+              ],
+              "query": [
+                {
+                  "key": "assessmentPeriodId",
+                  "value": "{{assessmentPeriodId}}"
+                },
+                {
+                  "key": "format",
+                  "value": "html",
+                  "description": "json | html | xlsx"
+                },
+                {
+                  "key": "studentId",
+                  "value": "{{studentId}}",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "One A4 card per student (or only studentId). xlsx = the class's ranked score sheet."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Class list",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/reports/class-list/{{classSectionId}}?format=html",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reports",
+                "class-list",
+                "{{classSectionId}}"
+              ],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "html",
+                  "description": "json | html | xlsx"
+                }
+              ]
+            },
+            "description": "បញ្ជីឈ្មោះសិស្ស with gender, date of birth, enrollment type and status."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Gender statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/reports/gender-statistics?format=html",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reports",
+                "gender-statistics"
+              ],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "html",
+                  "description": "json | html | xlsx"
+                },
+                {
+                  "key": "academicYearId",
+                  "value": "{{academicYearId}}",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "ស្ថិតិសិស្ស តាមភេទ per class, grade and school: enrolled, new, promoted, repeating, dropped out, graduated, still studying (total and girls)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Audit Log",
       "description": "Who changed what, and when. Read-only. Needs `LIST_AUDIT_LOGS` (System Admin, Principal).",
       "item": [

@@ -52,6 +52,9 @@ export const PERMISSIONS = {
   ATTENDANCE: { MARK: 'MARK_ATTENDANCE', MARK_ANY: 'MARK_ANY_ATTENDANCE', VIEW: 'VIEW_ATTENDANCE', VIEW_ANY: 'VIEW_ANY_ATTENDANCE' },
   // CREATE records a leave request (PENDING); REVIEW approves, rejects or cancels it
   LEAVE_REQUEST: { LIST: 'LIST_LEAVE_REQUESTS', CREATE: 'CREATE_LEAVE_REQUEST', REVIEW: 'REVIEW_LEAVE_REQUEST' },
+  // Period results (average, mention, class rank) and report cards. Without _ANY: only the user's homeroom class
+  RESULT: { CALCULATE: 'CALCULATE_RESULTS', CALCULATE_ANY: 'CALCULATE_ANY_RESULTS' },
+  REPORT_CARD: { VIEW: 'VIEW_REPORT_CARDS', VIEW_ANY: 'VIEW_ANY_REPORT_CARDS' },
 } as const;
 
 export type PermissionCode =
@@ -61,7 +64,9 @@ export type PermissionCode =
   | typeof PERMISSIONS.AUDIT_LOG.LIST
   | (typeof PERMISSIONS.SCORE)[keyof typeof PERMISSIONS.SCORE]
   | (typeof PERMISSIONS.ATTENDANCE)[keyof typeof PERMISSIONS.ATTENDANCE]
-  | (typeof PERMISSIONS.LEAVE_REQUEST)[keyof typeof PERMISSIONS.LEAVE_REQUEST];
+  | (typeof PERMISSIONS.LEAVE_REQUEST)[keyof typeof PERMISSIONS.LEAVE_REQUEST]
+  | (typeof PERMISSIONS.RESULT)[keyof typeof PERMISSIONS.RESULT]
+  | (typeof PERMISSIONS.REPORT_CARD)[keyof typeof PERMISSIONS.REPORT_CARD];
 
 export interface PermissionDefinition {
   module: string;
@@ -90,6 +95,10 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   { module: 'ATTENDANCE', code: 'LIST_LEAVE_REQUESTS', description: 'View students\' leave requests' },
   { module: 'ATTENDANCE', code: 'CREATE_LEAVE_REQUEST', description: 'Record a student\'s leave request (pending until reviewed)' },
   { module: 'ATTENDANCE', code: 'REVIEW_LEAVE_REQUEST', description: 'Approve, reject or cancel leave requests' },
+  { module: 'ASSESSMENT', code: 'CALCULATE_RESULTS', description: "Calculate period results (average, mention, rank) for one's homeroom class" },
+  { module: 'ASSESSMENT', code: 'CALCULATE_ANY_RESULTS', description: 'Calculate period results for any class' },
+  { module: 'ASSESSMENT', code: 'VIEW_REPORT_CARDS', description: "Print report cards for one's homeroom class" },
+  { module: 'ASSESSMENT', code: 'VIEW_ANY_REPORT_CARDS', description: 'Print report cards for any class' },
 ];
 
 export const ALL_PERMISSION_CODES: PermissionCode[] = PERMISSION_DEFINITIONS.map((p) => p.code);

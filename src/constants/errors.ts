@@ -206,6 +206,24 @@ const ERROR_DEFS = {
   NO_PREVIOUS_ENROLLMENT: def(409, (studentIdentifier: string) => `Student ${studentIdentifier} has no earlier enrollment; use NEW_ADMISSION`),
   SAME_CLASS_SECTION: def(400, 'Student is already in this class section'),
 
+  // ── Period results & reports ────────────────────────────
+  NOT_HOMEROOM_FOR_CLASS: def(403, (className: string, action: string) => `Only the homeroom teacher of class ${className} can ${action}`),
+  PERIOD_NOT_IN_CLASS_YEAR: def(400, (periodName: string, className: string, yearName: string) => `${periodName} is not in ${yearName}, the year of class ${className}`, {
+    code: 'ACADEMIC_YEAR_MISMATCH',
+  }),
+  NO_SUBJECTS_CONFIGURED: def(
+    409,
+    (periodName: string, gradeNumber: number) => `No subject of grade ${gradeNumber} has scoring rules for ${periodName}; set them up first`,
+  ),
+  SCORES_INCOMPLETE: def(
+    409,
+    (className: string, periodName: string, _missing: { studentIdentifier: string; latinName: string; subjects: string[] }[]) =>
+      `Some students in class ${className} have no score yet for ${periodName}; enter every score before calculating`,
+    { details: (_c: string, _p: string, missing: { studentIdentifier: string; latinName: string; subjects: string[] }[]) => ({ missing }) },
+  ),
+  RESULTS_NOT_CALCULATED: def(409, (className: string, periodName: string) => `Results for class ${className} in ${periodName} haven't been calculated yet`),
+  STUDENT_NOT_IN_REPORT: def(404, 'That student has no result in this class for this period'),
+
   // ── End-of-year promotion ───────────────────────────────
   PROMOTION_YEAR_NOT_STARTED: def(409, (className: string, yearName: string) => `Class ${className} is in ${yearName}, which hasn't started; there is nothing to promote yet`),
   STUDENT_IN_BOTH_LISTS: def(400, 'A student cannot be both repeating and excluded', {

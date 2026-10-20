@@ -16,6 +16,7 @@ import gradeRoutes from './routes/grade.routes';
 import gradingRoutes from './routes/grading.routes';
 import healthRoutes from './routes/health.routes';
 import meRoutes from './routes/me.routes';
+import reportRoutes from './routes/report.routes';
 import schoolSettingsRoutes from './routes/school-settings.routes';
 import staffRoutes from './routes/staff.routes';
 import studentRoutes from './routes/student.routes';
@@ -62,6 +63,7 @@ app.use('/api/v1/scores', gradingRoutes);
 app.use('/api/v1/attendance', attendanceRoutes);
 app.use('/api/v1/leave-requests', leaveRequestRoutes);
 app.use('/api/v1/audit-logs', auditLogRoutes);
+app.use('/api/v1/reports', reportRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

@@ -208,7 +208,8 @@ All routes are prefixed with `/api/v1`. Except for `/health` and `/auth/login`, 
 | Me (own data) | `GET /me/profile`, `GET /me/homeroom?academicYear=` |
 | Teacher | `GET /teacher/my-classes?academicYear=` |
 | Audit log | `GET /audit-logs` |
-| Scores | `POST /scores/subject` |
+| Scores | `POST /scores/subject`, `POST /scores/results/calculate` |
+| Reports | `GET /reports/class-list/:classSectionId`, `GET /reports/gender-statistics`, `GET /reports/report-cards/:classSectionId` |
 | Users | `GET /users`, `GET /users/:id`, `POST /users`, `PUT /users/:id/roles`, `PATCH /users/:id/status`, `POST /users/:id/reset-password`, `DELETE /users/:id` |
 | Roles | `GET /roles`, `GET /roles/:id` |
 | Staff | CRUD on `/staff`, plus `POST /staff/assign-homeroom` |
@@ -289,6 +290,42 @@ How the subject is scored depends on that period's `SubjectAssessmentConfig`, so
   - the student isn't enrolled that year
   - the subject isn't taught in the student's grade
 - **Audit:** every new or changed score is recorded as `SUBJECT_SCORE_RECORDED`, with the previous and new total and component scores.
+
+### Reports in Khmer
+
+All reports follow the MoEYS layout: the school name and code, and the "ព្រះរាជាណាចក្រកម្ពុជា / ជាតិ សាសនា ព្រះមហាក្សត្រ" header. Labels, dates and numbers are in Khmer. Choose the output with `?format=`:
+
+| `format` | Output |
+| --- | --- |
+| `json` (default) | The report data, for your own frontend |
+| `html` | A printable A4 page. Open it in a browser and print, or choose "Save as PDF" to get a PDF |
+| `xlsx` | An Excel file with real numbers and dates, e.g. for the district office |
+
+The Khmer fonts (Battambang for text, Moul for headings) are embedded in the page, so Khmer text displays correctly even on a school network with no internet access.
+
+| Report | Endpoint | Who |
+| --- | --- | --- |
+| Class list (បញ្ជីឈ្មោះសិស្ស) | `GET /reports/class-list/:classSectionId` | `VIEW_CLASS_SECTION` + `LIST_ENROLLMENTS` |
+| Gender statistics (ស្ថិតិសិស្ស តាមភេទ) | `GET /reports/gender-statistics?academicYearId=` (default: ACTIVE year) | `LIST_ENROLLMENTS` |
+| Report cards (ព្រឹត្តិបត្រពិន្ទុ) | `GET /reports/report-cards/:classSectionId?assessmentPeriodId=&studentId=` | `VIEW_REPORT_CARDS` (homeroom class) or `VIEW_ANY_REPORT_CARDS` |
+
+**Gender statistics:** for each class, each grade subtotal and the whole school, the report gives a total and the number of girls for each column:
+- enrolled, which is new admissions + promoted + repeating
+- dropped out
+- graduated
+- still studying
+
+**Report cards:** each card shows the student's subject scores, including components, the total, average, mention, class rank and the teacher's remarks, one A4 page per student. With `xlsx` you get the class's ranked score sheet instead.
+
+**Calculating results:** report cards need results first, calculated with `POST /scores/results/calculate { classSectionId, assessmentPeriodId }`.
+- **Who:** `CALCULATE_RESULTS` covers your own homeroom class; `CALCULATE_ANY_RESULTS` covers any class.
+- **Missing scores:** calculation is refused while any active student is missing a score. The error lists who is missing which subject.
+- **Formula** (in [`src/constants/grading.ts`](src/constants/grading.ts)):
+  - **Average:** total ÷ total possible × 100.
+  - **Mention:** A ≥ 90, B ≥ 80, C ≥ 70, D ≥ 60, E ≥ 50, F < 50.
+  - **Rank:** by average within the class; equal averages share a rank, as in 1, 1, 3.
+- **Recalculating:** you can recalculate at any time before the period is locked, for example after correcting a score. The teacher's remarks are kept.
+
 
 ### Audit log
 

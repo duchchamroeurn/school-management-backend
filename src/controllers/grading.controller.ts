@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Errors } from '../constants/errors';
 import { PERMISSIONS } from '../constants/permissions';
 import * as gradingService from '../services/grading.service';
+import * as resultsService from '../services/results.service';
 import { bodyOf, optionalScore, optionalString, required } from '../utils/validate';
 
 const MAX_COMPONENTS = 50;
@@ -40,4 +41,18 @@ export async function recordSubjectScore(req: Request, res: Response) {
     components: parseComponents(body.components),
   });
   res.status(created ? 201 : 200).json({ status: 'success', data: result });
+}
+
+// POST /api/v1/scores/results/calculate — { classSectionId, assessmentPeriodId }
+// Calculates every active student's total, average, mention and class rank for the period (needed for report
+// cards). Refused while a score is missing. CALCULATE_RESULTS: homeroom class only; CALCULATE_ANY_RESULTS: any class.
+export async function calculateResults(req: Request, res: Response) {
+  const body = bodyOf(req);
+  const actor = { staffProfileId: req.user!.staffProfileId, canCalculateAny: req.user!.permissions.includes(PERMISSIONS.RESULT.CALCULATE_ANY) };
+  const result = await resultsService.calculateResults(
+    actor,
+    required(optionalString(body.classSectionId, 'classSectionId'), 'classSectionId'),
+    required(optionalString(body.assessmentPeriodId, 'assessmentPeriodId'), 'assessmentPeriodId'),
+  );
+  res.json({ status: 'success', data: result });
 }
