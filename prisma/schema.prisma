@@ -37,6 +37,13 @@ enum EducationLevel {
   UPPER_SECONDARY // Grades 10, 11, 12
 }
 
+// Which grades this installation offers
+enum SchoolLevel {
+  LOWER_SECONDARY // អនុវិទ្យាល័យ: grades 7–9
+  UPPER_SECONDARY // វិទ្យាល័យ (high school only): grades 10–12
+  COMBINED // វិទ្យាល័យ with lower section: grades 7–12
+}
+
 enum StudentStatus {
   ENROLLED
   GRADUATED
@@ -53,6 +60,23 @@ enum AcademicYearStatus {
   UPCOMING
   ACTIVE
   COMPLETED
+}
+
+// ==========================================
+// SCHOOL SETTINGS (single row, id = 1)
+// ==========================================
+
+model SchoolSettings {
+  id        Int         @id @default(1) // always 1 — one school per installation
+  level     SchoolLevel @default(COMBINED)
+  khmerName String?     @map("khmer_name") // e.g. 'វិទ្យាល័យព្រះស៊ីសុវត្ថិ'
+  latinName String?     @map("latin_name") // e.g. 'Preah Sisowath High School'
+  moeysCode String?     @map("moeys_code") // school code issued by MoEYS
+  address   String?
+  phone     String?
+  updatedAt DateTime    @updatedAt @map("updated_at")
+
+  @@map("school_settings")
 }
 
 // ==========================================
