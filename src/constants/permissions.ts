@@ -42,11 +42,14 @@ export const PERMISSIONS = {
     [R in Resource]: ResourceCodes<R>;
   }),
   SELF_SERVICE: { VIEW_OWN_PROFILE: 'VIEW_OWN_PROFILE' },
+  // Single-row configuration: anyone signed in may read it, only this permission may change it
+  SCHOOL_SETTINGS: { UPDATE: 'UPDATE_SCHOOL_SETTINGS' },
 } as const;
 
 export type PermissionCode =
   | { [R in Resource]: ResourceCodes<R>[Action] }[Resource]
-  | typeof PERMISSIONS.SELF_SERVICE.VIEW_OWN_PROFILE;
+  | typeof PERMISSIONS.SELF_SERVICE.VIEW_OWN_PROFILE
+  | typeof PERMISSIONS.SCHOOL_SETTINGS.UPDATE;
 
 export interface PermissionDefinition {
   module: string;
@@ -63,6 +66,7 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     })),
   ),
   { module: 'SELF_SERVICE', code: 'VIEW_OWN_PROFILE', description: 'View own profile and enrollment' },
+  { module: 'SYSTEM', code: 'UPDATE_SCHOOL_SETTINGS', description: 'Change school name, MoEYS code and school level (grades offered)' },
 ];
 
 export const ALL_PERMISSION_CODES: PermissionCode[] = PERMISSION_DEFINITIONS.map((p) => p.code);
