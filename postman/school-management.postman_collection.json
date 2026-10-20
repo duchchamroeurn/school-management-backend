@@ -184,6 +184,126 @@
       ]
     },
     {
+      "name": "School Settings",
+      "description": "One school per installation. Anyone signed in can read the settings; changing them needs `UPDATE_SCHOOL_SETTINGS` (System Admin only). The level decides which grades exist: LOWER_SECONDARY (7–9), UPPER_SECONDARY (10–12), COMBINED (7–12).",
+      "item": [
+        {
+          "name": "Get school settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/school-settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "school-settings"
+              ]
+            },
+            "description": "Level, grades offered, Khmer/Latin name, MoEYS code, address, phone."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('has grades', () => pm.expect(pm.response.json().data.grades).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update school profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"khmerName\": \"វិទ្យាល័យ ព្រះស៊ីសុវត្ថិ\",\n  \"latinName\": \"Preah Sisowath High School\",\n  \"moeysCode\": \"PP-0001\",\n  \"address\": \"Phnom Penh\",\n  \"phone\": \"023 123 456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/school-settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "school-settings"
+              ]
+            },
+            "description": "Edit the body with your school details, then Send. Partial update: send only the fields you want to change; null or \"\" clears a field. khmerName must be Khmer script. Needs UPDATE_SCHOOL_SETTINGS (log in as admin — Principal gets 403)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Change school level",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"level\": \"COMBINED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/school-settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "school-settings"
+              ]
+            },
+            "description": "Set level to LOWER_SECONDARY (grades 7–9), UPPER_SECONDARY (10–12) or COMBINED (7–12), then Send. Adds the new range's grades (with default MoEYS subjects) and removes grades outside it. Returns 409 LEVEL_CHANGE_BLOCKED while any grade being removed still has class sections — on demo data run `npm run db:reset:demo -- --confirm --clear` first, then `npm run db:seed:demo` after switching. Needs UPDATE_SCHOOL_SETTINGS (admin)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200 or 409', () => pm.expect(pm.response.code).to.be.oneOf([200, 409]));",
+                  "if (pm.response.code === 409) console.warn(pm.response.json().message);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Grades",
       "description": "Permissions: `LIST_GRADES`, `VIEW_GRADE`, `CREATE_GRADE`, `UPDATE_GRADE`, `DELETE_GRADE`. Grades 7–12 are seeded; level is derived from the number.",
       "item": [
