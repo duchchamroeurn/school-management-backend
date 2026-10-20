@@ -13,7 +13,7 @@ export async function login(req: Request, res: Response) {
     throw Errors.CREDENTIALS_REQUIRED();
   }
 
-  const result = await authService.login(username, password);
+  const result = await authService.login(username, password, req.ip ?? 'unknown');
   res.json({ status: 'success', data: result });
 }
 

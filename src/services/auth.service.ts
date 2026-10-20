@@ -1,6 +1,7 @@
 import { Errors } from '../constants/errors';
 import { prisma } from '../lib/prisma';
 import { signAccessToken } from '../utils/jwt';
+import { assertLoginAllowed, recordLoginFailure, recordLoginSuccess } from '../utils/loginThrottle';
 import { checkPasswordPolicy, DUMMY_HASH, hashPassword, verifyPassword } from '../utils/password';
 
 export interface LoginResult {
@@ -15,7 +16,10 @@ export interface LoginResult {
   };
 }
 
-export async function login(username: string, password: string): Promise<LoginResult> {
+export async function login(username: string, password: string, clientIp: string): Promise<LoginResult> {
+  // Checked before the password, so a locked account rejects even the right one
+  assertLoginAllowed(clientIp, username);
+
   const user = await prisma.user.findUnique({
     where: { username },
     include: {
@@ -29,8 +33,10 @@ export async function login(username: string, password: string): Promise<LoginRe
   // The password is checked before the status so a wrong guess can't discover that an account is suspended.
   const passwordOk = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH);
   if (!user || !passwordOk) {
+    recordLoginFailure(clientIp, username);
     throw Errors.INVALID_CREDENTIALS();
   }
+  recordLoginSuccess(username);
   if (user.status !== 'ACTIVE') {
     throw Errors.ACCOUNT_SUSPENDED();
   }

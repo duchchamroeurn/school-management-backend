@@ -10,8 +10,13 @@ const PRISMA_ERRORS: Record<string, () => HttpError> = {
   P2025: Errors.RECORD_NOT_FOUND,
 };
 
-const send = (res: Response, err: HttpError) =>
+const send = (res: Response, err: HttpError) => {
+  const retryAfter = (err.details as { retryAfterSeconds?: unknown } | undefined)?.retryAfterSeconds;
+  if (typeof retryAfter === 'number') {
+    res.set('Retry-After', String(retryAfter));
+  }
   res.status(err.status).json({ status: 'error', code: err.code, message: err.message, details: err.details });
+};
 
 export const notFound = (req: Request, _res: Response, next: NextFunction) => {
   next(Errors.ROUTE_NOT_FOUND(req.method, req.path));

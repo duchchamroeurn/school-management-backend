@@ -60,6 +60,10 @@ JWT_SECRET=change-me-to-a-long-random-string
 | `JWT_SECRET` | Yes | | Secret used to sign access tokens |
 | `JWT_EXPIRES_IN` | No | `8h` | Access token lifetime |
 | `PORT` | No | `3000` | API port |
+| `LOGIN_MAX_FAILURES` | No | `5` | Failed logins in a row before a username is locked |
+| `LOGIN_LOCK_MINUTES` | No | `15` | How long a locked username stays locked |
+| `LOGIN_IP_MAX_FAILURES` | No | `30` | Failed logins from one IP before that IP is blocked |
+| `LOGIN_IP_WINDOW_MINUTES` | No | `15` | Window for `LOGIN_IP_MAX_FAILURES` |
 | `SEED_ADMIN_USERNAME` | No | `admin` | Username of the seeded root admin |
 | `SEED_ADMIN_PASSWORD` | No | `Admin@123!` | Initial password of the seeded root admin |
 | `DEMO_PASSWORD` | No | `Demo@1234` | Password for demo accounts (`db:seed:demo`) |
@@ -94,6 +98,8 @@ curl http://localhost:3000/api/v1/health
 ### First login
 
 Log in as `admin` with the `SEED_ADMIN_PASSWORD` (default `Admin@123!`). You must change the password through `POST /api/v1/auth/change-password` before other endpoints will accept the token.
+
+Failed logins are throttled. After `LOGIN_MAX_FAILURES` wrong passwords in a row, the username is locked for `LOGIN_LOCK_MINUTES`, and even the correct password is refused until the lock ends. An IP that reaches `LOGIN_IP_MAX_FAILURES` failures is also blocked. Both cases return `429` with a `Retry-After` header. The counters are kept in memory, so restarting the API clears them.
 
 ## Running with Docker
 

@@ -26,6 +26,11 @@ const def = <A extends unknown[] = []>(
 
 const fieldDetails = (field: string) => () => ({ field });
 
+const minutes = (seconds: number) => {
+  const m = Math.ceil(seconds / 60);
+  return `${m} minute${m === 1 ? '' : 's'}`;
+};
+
 const ERROR_DEFS = {
   // ── Generic ─────────────────────────────────────────────
   INVALID_FIELD: def(400, (field: string, problem: string) => `${field} ${problem}`, {
@@ -54,6 +59,13 @@ const ERROR_DEFS = {
   INVALID_CREDENTIALS: def(401, 'Invalid username or password'),
   WRONG_CURRENT_PASSWORD: def(401, 'Current password is incorrect', { code: 'INVALID_CREDENTIALS' }),
   ACCOUNT_SUSPENDED: def(403, 'This account is suspended'),
+  // Both send details.retryAfterSeconds, which errorHandler also sends as a Retry-After header
+  TOO_MANY_LOGIN_ATTEMPTS: def(429, (seconds: number) => `Too many failed login attempts from this address; try again in ${minutes(seconds)}`, {
+    details: (retryAfterSeconds: number) => ({ retryAfterSeconds }),
+  }),
+  ACCOUNT_LOCKED: def(429, (seconds: number) => `Too many failed login attempts; this account is locked for ${minutes(seconds)}`, {
+    details: (retryAfterSeconds: number) => ({ retryAfterSeconds }),
+  }),
   WEAK_PASSWORD: def(400, (field: string, problems: string[]) => `${field} must contain ${problems.join(', ')}`, {
     details: (_field: string, problems: string[]) => problems,
   }),
