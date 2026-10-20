@@ -1,6 +1,6 @@
+import { Errors } from '../constants/errors';
 import { AcademicYearStatus, Prisma } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
-import { HttpError } from '../utils/httpError';
 
 export interface AcademicYearInput {
   name: string; // e.g., "2026-2027"
@@ -11,21 +11,20 @@ export interface AcademicYearInput {
 
 const withCounts = { _count: { select: { classes: true, enrollments: true } } } as const;
 
-const notFound = () => new HttpError(404, 'ACADEMIC_YEAR_NOT_FOUND', 'Academic year not found');
 
 function validateYear({ name, startDate, endDate }: Pick<AcademicYearInput, 'name' | 'startDate' | 'endDate'>) {
   const match = /^(\d{4})-(\d{4})$/.exec(name);
   if (!match || Number(match[2]) !== Number(match[1]) + 1) {
-    throw new HttpError(400, 'VALIDATION_ERROR', 'name must be two consecutive years, e.g. "2026-2027"', { field: 'name' });
+    throw Errors.YEAR_NAME_FORMAT();
   }
   if (endDate <= startDate) {
-    throw new HttpError(400, 'VALIDATION_ERROR', 'endDate must be after startDate', { field: 'endDate' });
+    throw Errors.END_BEFORE_START();
   }
 }
 
 async function assertNameFree(tx: Prisma.TransactionClient, name: string) {
   if (await tx.academicYear.findUnique({ where: { name } })) {
-    throw new HttpError(409, 'ACADEMIC_YEAR_EXISTS', `Academic year ${name} already exists`);
+    throw Errors.ACADEMIC_YEAR_EXISTS(name);
   }
 }
 
@@ -35,7 +34,7 @@ async function assertNoOtherActive(tx: Prisma.TransactionClient, excludeId?: str
     where: { status: AcademicYearStatus.ACTIVE, ...(excludeId && { id: { not: excludeId } }) },
   });
   if (active) {
-    throw new HttpError(409, 'ACTIVE_YEAR_EXISTS', `Academic year ${active.name} is already active; complete it first`);
+    throw Errors.ACTIVE_YEAR_EXISTS(active.name);
   }
 }
 
@@ -45,7 +44,7 @@ async function serializable<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>)
     return await prisma.$transaction(fn, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {
-      throw new HttpError(409, 'CONFLICT', 'Another change was made at the same time; please retry');
+      throw Errors.CONFLICT();
     }
     throw err;
   }
@@ -70,7 +69,7 @@ export async function getAcademicYear(id: string) {
       },
     },
   });
-  if (!year) throw notFound();
+  if (!year) throw Errors.ACADEMIC_YEAR_NOT_FOUND();
   return year;
 }
 
@@ -86,7 +85,7 @@ export function createAcademicYear(data: AcademicYearInput) {
 export function updateAcademicYear(id: string, data: Partial<AcademicYearInput>) {
   return serializable(async (tx) => {
     const year = await tx.academicYear.findUnique({ where: { id } });
-    if (!year) throw notFound();
+    if (!year) throw Errors.ACADEMIC_YEAR_NOT_FOUND();
 
     const merged = {
       name: data.name ?? year.name,
@@ -107,13 +106,9 @@ export function updateAcademicYear(id: string, data: Partial<AcademicYearInput>)
 
 export async function deleteAcademicYear(id: string) {
   const year = await prisma.academicYear.findUnique({ where: { id }, include: withCounts });
-  if (!year) throw notFound();
+  if (!year) throw Errors.ACADEMIC_YEAR_NOT_FOUND();
   if (year._count.classes > 0 || year._count.enrollments > 0) {
-    throw new HttpError(
-      409,
-      'ACADEMIC_YEAR_IN_USE',
-      `Academic year ${year.name} has ${year._count.classes} class section(s) and ${year._count.enrollments} enrollment(s); it cannot be deleted`,
-    );
+    throw Errors.ACADEMIC_YEAR_IN_USE(year.name, year._count.classes, year._count.enrollments);
   }
   await prisma.academicYear.delete({ where: { id } });
 }

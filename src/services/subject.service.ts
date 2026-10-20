@@ -1,6 +1,6 @@
+import { Errors } from '../constants/errors';
 import { Prisma } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
-import { HttpError } from '../utils/httpError';
 
 export interface CreateSubjectInput {
   code: string; // e.g. "MATH" — permanent
@@ -32,11 +32,10 @@ const toDto = ({ gradeSubjects, ...subject }: SubjectWithGrades) => ({
   grades: gradeSubjects.map((gs) => gs.grade),
 });
 
-const notFound = () => new HttpError(404, 'SUBJECT_NOT_FOUND', 'Subject not found');
 
 async function loadSubject(id: string) {
   const subject = await prisma.subject.findUnique({ where: { id }, include: withGrades });
-  if (!subject) throw notFound();
+  if (!subject) throw Errors.SUBJECT_NOT_FOUND();
   return subject;
 }
 
@@ -64,7 +63,7 @@ export async function getSubject(id: string) {
 }
 
 export async function createSubject(data: CreateSubjectInput) {
-  const codeTaken = () => new HttpError(409, 'SUBJECT_CODE_EXISTS', `Subject code ${data.code} already exists`);
+  const codeTaken = () => Errors.SUBJECT_CODE_EXISTS(data.code);
   if (await prisma.subject.findUnique({ where: { code: data.code } })) throw codeTaken();
   try {
     return toDto(await prisma.subject.create({ data, include: withGrades }));
@@ -83,10 +82,9 @@ export async function updateSubject(id: string, data: UpdateSubjectInput) {
 export async function deleteSubject(id: string) {
   const subject = await loadSubject(id);
   if (subject.gradeSubjects.length > 0) {
-    throw new HttpError(
-      409,
-      'SUBJECT_IN_USE',
-      `${subject.latinName} is assigned to grade(s) ${subject.gradeSubjects.map((gs) => gs.grade.gradeNumber).join(', ')}; unassign it first`,
+    throw Errors.SUBJECT_IN_USE(
+      subject.latinName,
+      subject.gradeSubjects.map((gs) => gs.grade.gradeNumber),
     );
   }
   await prisma.subject.delete({ where: { id } });
@@ -97,7 +95,7 @@ export async function assignToGrades(id: string, gradeIds: string[]) {
   const subject = await loadSubject(id);
   const grades = await prisma.grade.findMany({ where: { id: { in: gradeIds } } });
   const missing = gradeIds.filter((gid) => !grades.some((g) => g.id === gid));
-  if (missing.length) throw new HttpError(404, 'GRADE_NOT_FOUND', 'One or more grades do not exist', { missing });
+  if (missing.length) throw Errors.GRADES_NOT_FOUND(missing);
 
   const alreadyAssigned = grades.filter((g) => subject.gradeSubjects.some((gs) => gs.grade.id === g.id));
   await prisma.gradeSubject.createMany({ data: gradeIds.map((gradeId) => ({ gradeId, subjectId: id })), skipDuplicates: true });
@@ -114,8 +112,8 @@ export async function unassignFromGrade(id: string, gradeId: string) {
   const link = subject.gradeSubjects.find((gs) => gs.grade.id === gradeId);
   if (!link) {
     const grade = await prisma.grade.findUnique({ where: { id: gradeId } });
-    if (!grade) throw new HttpError(404, 'GRADE_NOT_FOUND', 'Grade not found');
-    throw new HttpError(404, 'NOT_ASSIGNED', `${subject.latinName} is not assigned to grade ${grade.gradeNumber}`);
+    if (!grade) throw Errors.GRADE_NOT_FOUND();
+    throw Errors.NOT_ASSIGNED(subject.latinName, grade.gradeNumber);
   }
   await prisma.gradeSubject.delete({ where: { gradeId_subjectId: { gradeId, subjectId: id } } });
   return getSubject(id);

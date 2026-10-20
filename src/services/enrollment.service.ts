@@ -1,6 +1,6 @@
+import { Errors } from '../constants/errors';
 import { AcademicYearStatus, EnrollmentType, Prisma, StudentStatus } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
-import { HttpError } from '../utils/httpError';
 
 const details = {
   student: { select: { id: true, studentIdentifier: true, khmerName: true, latinName: true, gender: true, status: true } },
@@ -23,10 +23,9 @@ const activeEnrollmentsIn = (classSectionId: string): Prisma.YearlyEnrollmentWhe
   student: { status: StudentStatus.ENROLLED },
 });
 
-const notFound = () => new HttpError(404, 'ENROLLMENT_NOT_FOUND', 'Enrollment not found');
 
 const yearClosed = (name: string) =>
-  new HttpError(409, 'ACADEMIC_YEAR_CLOSED', `Academic year ${name} is completed; its enrollments can no longer be changed`);
+  Errors.ACADEMIC_YEAR_CLOSED(name, 'its enrollments');
 
 /**
  * Locks the class section row until the surrounding transaction ends, then loads it.
@@ -36,7 +35,7 @@ const yearClosed = (name: string) =>
 async function lockClassSection(tx: Prisma.TransactionClient, classSectionId: string) {
   const [locked] = await tx.$queryRaw<{ id: string }[]>`
     SELECT id FROM class_sections WHERE id = ${classSectionId} FOR UPDATE`;
-  if (!locked) throw new HttpError(404, 'CLASS_SECTION_NOT_FOUND', 'Class section not found');
+  if (!locked) throw Errors.CLASS_SECTION_NOT_FOUND();
 
   const classSection = await tx.classSection.findUniqueOrThrow({
     where: { id: classSectionId },
@@ -50,16 +49,13 @@ async function lockClassSection(tx: Prisma.TransactionClient, classSectionId: st
 async function assertSeatAvailable(tx: Prisma.TransactionClient, classSection: { id: string; maxCapacity: number }) {
   const current = await tx.yearlyEnrollment.count({ where: activeEnrollmentsIn(classSection.id) });
   if (current >= classSection.maxCapacity) {
-    throw new HttpError(400, 'CLASS_CAPACITY_REACHED', 'Class capacity reached.', {
-      maxCapacity: classSection.maxCapacity,
-      currentEnrollment: current,
-    });
+    throw Errors.CLASS_CAPACITY_REACHED(classSection.maxCapacity, current);
   }
 }
 
 const alreadyEnrolled = (err: unknown) =>
   err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002'
-    ? new HttpError(409, 'ALREADY_ENROLLED', 'Student is already enrolled in this academic year')
+    ? Errors.ALREADY_ENROLLED()
     : err;
 
 /**
@@ -72,32 +68,24 @@ export async function enrollStudentInClass(studentId: string, classSectionId: st
     return await prisma.$transaction(async (tx) => {
       const classSection = await lockClassSection(tx, classSectionId);
       if (classSection.academicYearId !== academicYearId) {
-        throw new HttpError(
-          400,
-          'ACADEMIC_YEAR_MISMATCH',
-          `Class ${classSection.grade.gradeNumber}${classSection.sectionName} belongs to academic year ${classSection.academicYear.name}, not the one requested`,
-        );
+        throw Errors.CLASS_IN_OTHER_YEAR(`${classSection.grade.gradeNumber}${classSection.sectionName}`, classSection.academicYear.name);
       }
 
       const student = await tx.studentProfile.findUnique({
         where: { id: studentId },
         include: { enrollments: { include: { academicYear: true } } },
       });
-      if (!student) throw new HttpError(404, 'STUDENT_NOT_FOUND', 'Student not found');
+      if (!student) throw Errors.STUDENT_NOT_FOUND();
       if (student.status !== StudentStatus.ENROLLED) {
-        throw new HttpError(409, 'STUDENT_NOT_ACTIVE', `Student ${student.studentIdentifier} is ${student.status} and cannot be enrolled`);
+        throw Errors.STUDENT_NOT_ACTIVE(student.studentIdentifier, student.status);
       }
 
       const sameYear = student.enrollments.find((e) => e.academicYearId === academicYearId);
       if (sameYear) {
-        throw new HttpError(409, 'ALREADY_ENROLLED', `Student ${student.studentIdentifier} is already enrolled in academic year ${sameYear.academicYear.name}`);
+        throw Errors.ALREADY_ENROLLED(student.studentIdentifier, sameYear.academicYear.name);
       }
       if (student.enrollments.length > 0) {
-        throw new HttpError(
-          409,
-          'NOT_A_NEW_ADMISSION',
-          `Student ${student.studentIdentifier} has previous enrollments; use promotion or repeating instead of NEW_ADMISSION`,
-        );
+        throw Errors.NOT_A_NEW_ADMISSION(student.studentIdentifier);
       }
 
       await assertSeatAvailable(tx, classSection);
@@ -128,22 +116,22 @@ export async function enrollContinuingStudent(
     return await prisma.$transaction(async (tx) => {
       const classSection = await lockClassSection(tx, classSectionId);
       if (classSection.academicYearId !== academicYearId) {
-        throw new HttpError(400, 'ACADEMIC_YEAR_MISMATCH', `Class ${classSection.grade.gradeNumber}${classSection.sectionName} belongs to academic year ${classSection.academicYear.name}`);
+        throw Errors.CLASS_IN_OTHER_YEAR(`${classSection.grade.gradeNumber}${classSection.sectionName}`, classSection.academicYear.name);
       }
 
       const student = await tx.studentProfile.findUnique({
         where: { id: studentId },
         include: { enrollments: { include: { academicYear: true } } },
       });
-      if (!student) throw new HttpError(404, 'STUDENT_NOT_FOUND', 'Student not found');
+      if (!student) throw Errors.STUDENT_NOT_FOUND();
       if (student.status !== StudentStatus.ENROLLED) {
-        throw new HttpError(409, 'STUDENT_NOT_ACTIVE', `Student ${student.studentIdentifier} is ${student.status} and cannot be enrolled`);
+        throw Errors.STUDENT_NOT_ACTIVE(student.studentIdentifier, student.status);
       }
       if (student.enrollments.some((e) => e.academicYearId === academicYearId)) {
-        throw new HttpError(409, 'ALREADY_ENROLLED', `Student ${student.studentIdentifier} is already enrolled in ${classSection.academicYear.name}`);
+        throw Errors.ALREADY_ENROLLED(student.studentIdentifier, classSection.academicYear.name);
       }
       if (!student.enrollments.some((e) => e.academicYear.startDate < classSection.academicYear.startDate)) {
-        throw new HttpError(409, 'NO_PREVIOUS_ENROLLMENT', `Student ${student.studentIdentifier} has no earlier enrollment; use NEW_ADMISSION`);
+        throw Errors.NO_PREVIOUS_ENROLLMENT(student.studentIdentifier);
       }
 
       await assertSeatAvailable(tx, classSection);
@@ -183,7 +171,7 @@ export async function listEnrollments(filter: ListEnrollmentsFilter) {
 
 export async function getEnrollment(id: string) {
   const enrollment = await prisma.yearlyEnrollment.findUnique({ where: { id }, include: details });
-  if (!enrollment) throw notFound();
+  if (!enrollment) throw Errors.ENROLLMENT_NOT_FOUND();
   return enrollment;
 }
 
@@ -194,19 +182,15 @@ export async function getEnrollment(id: string) {
 export async function transferEnrollment(id: string, targetClassSectionId: string) {
   return prisma.$transaction(async (tx) => {
     const enrollment = await tx.yearlyEnrollment.findUnique({ where: { id }, include: { academicYear: true, student: true } });
-    if (!enrollment) throw notFound();
+    if (!enrollment) throw Errors.ENROLLMENT_NOT_FOUND();
     if (enrollment.academicYear.status === AcademicYearStatus.COMPLETED) throw yearClosed(enrollment.academicYear.name);
     if (enrollment.classSectionId === targetClassSectionId) {
-      throw new HttpError(400, 'SAME_CLASS_SECTION', 'Student is already in this class section');
+      throw Errors.SAME_CLASS_SECTION();
     }
 
     const target = await lockClassSection(tx, targetClassSectionId);
     if (target.academicYearId !== enrollment.academicYearId) {
-      throw new HttpError(
-        400,
-        'ACADEMIC_YEAR_MISMATCH',
-        `Transfers must stay within ${enrollment.academicYear.name}; class ${target.grade.gradeNumber}${target.sectionName} is in ${target.academicYear.name}`,
-      );
+      throw Errors.TRANSFER_OUTSIDE_YEAR(enrollment.academicYear.name, `${target.grade.gradeNumber}${target.sectionName}`, target.academicYear.name);
     }
     // A dropped-out/graduated student doesn't occupy a seat, so moving their record doesn't need one
     if (enrollment.student.status === StudentStatus.ENROLLED) await assertSeatAvailable(tx, target);
@@ -218,7 +202,7 @@ export async function transferEnrollment(id: string, targetClassSectionId: strin
 // For enrollments made by mistake. Students who leave keep their enrollment and get status DROPPED_OUT.
 export async function deleteEnrollment(id: string) {
   const enrollment = await prisma.yearlyEnrollment.findUnique({ where: { id }, include: { academicYear: true } });
-  if (!enrollment) throw notFound();
+  if (!enrollment) throw Errors.ENROLLMENT_NOT_FOUND();
   if (enrollment.academicYear.status === AcademicYearStatus.COMPLETED) throw yearClosed(enrollment.academicYear.name);
   await prisma.yearlyEnrollment.delete({ where: { id } });
 }
@@ -239,7 +223,7 @@ export async function getClassRoster(classSectionId: string) {
       },
     },
   });
-  if (!classSection) throw new HttpError(404, 'CLASS_SECTION_NOT_FOUND', 'Class section not found');
+  if (!classSection) throw Errors.CLASS_SECTION_NOT_FOUND();
 
   const { enrollments, ...info } = classSection;
   const active = enrollments.filter((e) => e.student.status === StudentStatus.ENROLLED);

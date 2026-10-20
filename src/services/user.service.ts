@@ -1,7 +1,7 @@
+import { Errors } from '../constants/errors';
 import { SYSTEM_ROLES } from '../constants/roles';
 import { Prisma, UserStatus } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
-import { HttpError } from '../utils/httpError';
 import { checkPasswordPolicy, generateTemporaryPassword, hashPassword } from '../utils/password';
 import { assertCanGrant } from './role.service';
 
@@ -49,7 +49,6 @@ function toDto(user: UserWithRelations) {
   };
 }
 
-const notFound = () => new HttpError(404, 'USER_NOT_FOUND', 'User not found');
 
 // Arbitrary constant identifying the "admin safety" lock: serialises role/status/delete changes
 // so two admins can't simultaneously remove each other and leave no active System Admin.
@@ -68,19 +67,19 @@ async function assertNotLastActiveAdmin(tx: Prisma.TransactionClient, user: User
     },
   });
   if (otherActiveAdmins === 0) {
-    throw new HttpError(409, 'LAST_SYSTEM_ADMIN', `Cannot ${action}: ${user.username} is the last active System Admin`);
+    throw Errors.LAST_SYSTEM_ADMIN(action, user.username);
   }
 }
 
 function assertNotSelf(actorId: string, userId: string, action: string) {
-  if (actorId === userId) throw new HttpError(400, 'CANNOT_MODIFY_SELF', `You cannot ${action} your own account`);
+  if (actorId === userId) throw Errors.CANNOT_MODIFY_SELF(action);
 }
 
 function resolvePassword(temporaryPassword?: string) {
   if (temporaryPassword === undefined) return generateTemporaryPassword();
   const problems = checkPasswordPolicy(temporaryPassword);
   if (problems.length) {
-    throw new HttpError(400, 'WEAK_PASSWORD', `temporaryPassword must contain ${problems.join(', ')}`, problems);
+    throw Errors.WEAK_PASSWORD('temporaryPassword', problems);
   }
   return temporaryPassword;
 }
@@ -90,19 +89,19 @@ async function resolveRoles(tx: Prisma.TransactionClient, roleIds: string[] | un
   if (profileType === 'STUDENT') {
     const studentRole = await tx.role.findUniqueOrThrow({ where: { latinName: SYSTEM_ROLES.STUDENT } });
     if (roleIds?.some((id) => id !== studentRole.id)) {
-      throw new HttpError(400, 'INVALID_ROLE', 'Student logins can only have the Student role');
+      throw Errors.STUDENT_ROLE_ONLY();
     }
     return [studentRole];
   }
 
   if (!roleIds?.length) {
-    throw new HttpError(400, 'VALIDATION_ERROR', 'roleIds must contain at least one role for a staff login', { field: 'roleIds' });
+    throw Errors.STAFF_ROLE_REQUIRED();
   }
   const roles = await tx.role.findMany({ where: { id: { in: roleIds } } });
   const missing = roleIds.filter((id) => !roles.some((r) => r.id === id));
-  if (missing.length) throw new HttpError(404, 'ROLE_NOT_FOUND', 'One or more roles do not exist', { missing });
+  if (missing.length) throw Errors.ROLES_NOT_FOUND(missing);
   if (roles.some((r) => r.latinName === SYSTEM_ROLES.STUDENT)) {
-    throw new HttpError(400, 'INVALID_ROLE', 'The Student role is reserved for student logins');
+    throw Errors.STUDENT_ROLE_RESERVED();
   }
   return roles;
 }
@@ -116,7 +115,7 @@ async function assertCanAssign(tx: Prisma.TransactionClient, actorPermissions: s
 
 async function loadUser(tx: Prisma.TransactionClient, id: string) {
   const user = await tx.user.findUnique({ where: { id }, include: userInclude });
-  if (!user) throw notFound();
+  if (!user) throw Errors.USER_NOT_FOUND();
   return user;
 }
 
@@ -162,17 +161,15 @@ export async function createLogin(input: CreateLoginInput, actorPermissions?: st
           : await tx.$queryRaw<{ id: string; user_id: string | null }[]>`SELECT id, user_id FROM student_profiles WHERE id = ${profileId} FOR UPDATE`;
       if (!locked) {
         throw profileType === 'STAFF'
-          ? new HttpError(404, 'STAFF_NOT_FOUND', 'Staff member not found')
-          : new HttpError(404, 'STUDENT_NOT_FOUND', 'Student not found');
+          ? Errors.STAFF_NOT_FOUND()
+          : Errors.STUDENT_NOT_FOUND();
       }
       if (locked.user_id) {
         const existing = await tx.user.findUnique({ where: { id: locked.user_id } });
-        throw new HttpError(409, 'PROFILE_HAS_LOGIN', `This ${profileType.toLowerCase()} profile already has a login (${existing?.username})`, {
-          existingUserId: locked.user_id,
-        });
+        throw Errors.PROFILE_HAS_LOGIN(profileType.toLowerCase(), existing?.username, locked.user_id);
       }
       if (await tx.user.findUnique({ where: { username: input.username } })) {
-        throw new HttpError(409, 'USERNAME_TAKEN', `Username ${input.username} is already taken`);
+        throw Errors.USERNAME_TAKEN(input.username);
       }
 
       const roles = await resolveRoles(tx, input.roleIds, profileType);
@@ -192,7 +189,7 @@ export async function createLogin(input: CreateLoginInput, actorPermissions?: st
     return { user: toDto(user), temporaryPassword: password, mustChangePassword: true };
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      throw new HttpError(409, 'USERNAME_TAKEN', `Username ${input.username} is already taken`);
+      throw Errors.USERNAME_TAKEN(input.username);
     }
     throw err;
   }

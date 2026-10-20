@@ -1,17 +1,17 @@
 import { NextFunction, Request, Response } from 'express';
+import { Errors } from '../constants/errors';
 import { PermissionCode } from '../constants/permissions';
-import { HttpError } from '../utils/httpError';
 
 // Use after authenticate(). The user must hold ALL listed permission codes (via any of their roles).
 export const requirePermission =
   (...codes: PermissionCode[]) =>
   (req: Request, _res: Response, next: NextFunction) => {
     if (!req.user) {
-      throw new HttpError(401, 'UNAUTHENTICATED', 'Authentication required');
+      throw Errors.AUTH_REQUIRED();
     }
     const missing = codes.filter((code) => !req.user!.permissions.includes(code));
     if (missing.length) {
-      throw new HttpError(403, 'FORBIDDEN', 'You do not have permission to perform this action', { missing });
+      throw Errors.FORBIDDEN(missing);
     }
     next();
   };

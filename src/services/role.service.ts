@@ -1,7 +1,7 @@
+import { Errors } from '../constants/errors';
 import { PERMISSION_DEFINITIONS } from '../constants/permissions';
 import { Prisma } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
-import { HttpError } from '../utils/httpError';
 
 // Permissions are defined in code (each one is enforced by a route), so roles are built from this catalogue.
 // Custom roles can be created and edited freely; system roles (isSystemDefault) are owned by the seed.
@@ -26,7 +26,6 @@ const toDto = ({ rolePermissions, ...role }: RoleWithPermissions) => ({
   permissions: rolePermissions.map((rp) => rp.permission),
 });
 
-const notFound = () => new HttpError(404, 'ROLE_NOT_FOUND', 'Role not found');
 
 /**
  * Privilege-escalation guard: an actor can only grant permissions they hold themselves.
@@ -36,7 +35,7 @@ export function assertCanGrant(actorPermissions: string[] | undefined, codes: st
   if (!actorPermissions) return;
   const notHeld = [...new Set(codes)].filter((c) => !actorPermissions.includes(c));
   if (notHeld.length) {
-    throw new HttpError(403, 'CANNOT_GRANT_PERMISSION', 'You can only grant permissions you hold yourself', { notHeld });
+    throw Errors.CANNOT_GRANT_PERMISSION(notHeld);
   }
 }
 
@@ -44,29 +43,29 @@ function assertKnownCodes(codes: string[]) {
   const known = new Set(PERMISSION_DEFINITIONS.map((p) => p.code as string));
   const unknown = codes.filter((c) => !known.has(c));
   if (unknown.length) {
-    throw new HttpError(400, 'UNKNOWN_PERMISSION', 'One or more permission codes do not exist — see GET /api/v1/permissions', { unknown });
+    throw Errors.UNKNOWN_PERMISSION(unknown);
   }
   if (!codes.length) {
-    throw new HttpError(400, 'VALIDATION_ERROR', 'permissionCodes must contain at least one permission', { field: 'permissionCodes' });
+    throw Errors.PERMISSION_CODES_REQUIRED();
   }
 }
 
 async function loadRole(db: Prisma.TransactionClient, id: string) {
   const role = await db.role.findUnique({ where: { id }, include: roleDetails });
-  if (!role) throw notFound();
+  if (!role) throw Errors.ROLE_NOT_FOUND();
   return role;
 }
 
 function assertCustom(role: { isSystemDefault: boolean; latinName: string }) {
   if (role.isSystemDefault) {
-    throw new HttpError(409, 'SYSTEM_ROLE_IMMUTABLE', `${role.latinName} is a system role and cannot be changed or deleted; create a custom role instead`);
+    throw Errors.SYSTEM_ROLE_IMMUTABLE(role.latinName);
   }
 }
 
 async function assertNameFree(db: Prisma.TransactionClient, latinName: string, exceptId?: string) {
   const existing = await db.role.findFirst({ where: { latinName: { equals: latinName, mode: 'insensitive' } } });
   if (existing && existing.id !== exceptId) {
-    throw new HttpError(409, 'ROLE_NAME_EXISTS', `A role named "${existing.latinName}" already exists`);
+    throw Errors.ROLE_NAME_EXISTS(existing.latinName);
   }
 }
 
@@ -116,7 +115,7 @@ export async function createRole(actorPermissions: string[] | undefined, data: C
     return toDto(role);
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      throw new HttpError(409, 'ROLE_NAME_EXISTS', `A role named "${data.latinName}" already exists`);
+      throw Errors.ROLE_NAME_EXISTS(data.latinName);
     }
     throw err;
   }
@@ -153,9 +152,7 @@ export async function deleteRole(id: string) {
     const role = await loadRole(tx, id);
     assertCustom(role);
     if (role._count.userRoles > 0) {
-      throw new HttpError(409, 'ROLE_IN_USE', `${role.latinName} is assigned to ${role._count.userRoles} user(s); change their roles first`, {
-        users: role._count.userRoles,
-      });
+      throw Errors.ROLE_IN_USE(role.latinName, role._count.userRoles);
     }
     // role_permissions rows cascade
     await tx.role.delete({ where: { id } });

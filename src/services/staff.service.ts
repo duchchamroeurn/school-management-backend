@@ -1,6 +1,6 @@
+import { Errors } from '../constants/errors';
 import { AcademicYearStatus, Gender, Prisma } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
-import { HttpError } from '../utils/httpError';
 import { assertTeacherFreeForYear, classSectionDetails, guardUnique } from './class-section.service';
 
 export interface StaffInput {
@@ -31,15 +31,9 @@ const summary = {
   _count: { select: { homeroomClasses: true } },
 } as const;
 
-const notFound = () => new HttpError(404, 'STAFF_NOT_FOUND', 'Staff member not found');
 
 const duplicateStaff = (existing: { id: string; nationalIdNo: string; khmerName: string; latinName: string }) =>
-  new HttpError(
-    409,
-    'DUPLICATE_STAFF',
-    `National ID ${existing.nationalIdNo} is already registered to ${existing.latinName} (${existing.khmerName})`,
-    { existingStaffId: existing.id },
-  );
+  Errors.DUPLICATE_STAFF(existing);
 
 async function assertNationalIdFree(nationalIdNo: string, excludeId?: string) {
   const existing = await prisma.staffProfile.findUnique({ where: { nationalIdNo } });
@@ -62,7 +56,7 @@ async function guardDuplicate<T>(nationalIdNo: string | undefined, write: () => 
 
 function assertHireDateNotInFuture(hireDate: Date) {
   if (hireDate > new Date()) {
-    throw new HttpError(400, 'VALIDATION_ERROR', 'hireDate cannot be in the future', { field: 'hireDate' });
+    throw Errors.HIRE_DATE_IN_FUTURE();
   }
 }
 
@@ -97,7 +91,7 @@ export async function getStaff(id: string) {
       },
     },
   });
-  if (!staff) throw notFound();
+  if (!staff) throw Errors.STAFF_NOT_FOUND();
   return staff;
 }
 
@@ -108,7 +102,7 @@ export async function createStaff(data: StaffInput) {
 }
 
 export async function updateStaff(id: string, data: Partial<StaffInput>) {
-  if (!(await prisma.staffProfile.findUnique({ where: { id } }))) throw notFound();
+  if (!(await prisma.staffProfile.findUnique({ where: { id } }))) throw Errors.STAFF_NOT_FOUND();
   if (data.hireDate) assertHireDateNotInFuture(data.hireDate);
   if (data.nationalIdNo) await assertNationalIdFree(data.nationalIdNo, id);
   return guardDuplicate(data.nationalIdNo, () => prisma.staffProfile.update({ where: { id }, data, include: summary }));
@@ -117,16 +111,12 @@ export async function updateStaff(id: string, data: Partial<StaffInput>) {
 // Staff who were ever a homeroom teacher keep their record (class history); same for staff with a login.
 export async function deleteStaff(id: string) {
   const staff = await prisma.staffProfile.findUnique({ where: { id }, include: summary });
-  if (!staff) throw notFound();
+  if (!staff) throw Errors.STAFF_NOT_FOUND();
   if (staff._count.homeroomClasses > 0) {
-    throw new HttpError(
-      409,
-      'STAFF_HAS_HOMEROOM',
-      `${staff.latinName} is homeroom teacher of ${staff._count.homeroomClasses} class(es); unassign them first`,
-    );
+    throw Errors.STAFF_HAS_HOMEROOM(staff.latinName, staff._count.homeroomClasses);
   }
   if (staff.user) {
-    throw new HttpError(409, 'STAFF_HAS_LOGIN', `${staff.latinName} has a login account; remove it first`);
+    throw Errors.STAFF_HAS_LOGIN(staff.latinName);
   }
   await prisma.staffProfile.delete({ where: { id } });
 }
@@ -146,20 +136,20 @@ export async function assignHomeroom({ staffId, classSectionId, academicYearName
       : prisma.academicYear.findFirst({ where: { status: AcademicYearStatus.ACTIVE } }),
   ]);
 
-  if (!staff) throw notFound();
-  if (!classSection) throw new HttpError(404, 'CLASS_SECTION_NOT_FOUND', 'Class section (homeroom) not found');
+  if (!staff) throw Errors.STAFF_NOT_FOUND();
+  if (!classSection) throw Errors.HOMEROOM_CLASS_NOT_FOUND();
   if (!academicYear) {
     throw academicYearName
-      ? new HttpError(404, 'ACADEMIC_YEAR_NOT_FOUND', `Academic year ${academicYearName} not found`)
-      : new HttpError(400, 'VALIDATION_ERROR', 'academicYear is required because no academic year is ACTIVE', { field: 'academicYear' });
+      ? Errors.ACADEMIC_YEAR_NOT_FOUND(academicYearName)
+      : Errors.ACADEMIC_YEAR_REQUIRED();
   }
 
   const className = `${classSection.grade.gradeNumber}${classSection.sectionName}`;
   if (classSection.academicYearId !== academicYear.id) {
-    throw new HttpError(400, 'ACADEMIC_YEAR_MISMATCH', `Class ${className} does not belong to academic year ${academicYear.name}`);
+    throw Errors.CLASS_NOT_IN_YEAR(className, academicYear.name);
   }
   if (academicYear.status === AcademicYearStatus.COMPLETED) {
-    throw new HttpError(409, 'ACADEMIC_YEAR_CLOSED', `Academic year ${academicYear.name} is completed; homeroom teachers can no longer be changed`);
+    throw Errors.ACADEMIC_YEAR_CLOSED(academicYear.name, 'homeroom teachers');
   }
 
   const previous = classSection.homeroomTeacher;

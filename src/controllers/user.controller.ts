@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
+import { Errors } from '../constants/errors';
 import { UserStatus } from '../generated/prisma/client';
 import * as userService from '../services/user.service';
-import { HttpError } from '../utils/httpError';
 import {
   bodyOf,
   optionalEnum,
@@ -39,13 +39,7 @@ export async function create(req: Request, res: Response) {
   const staffId = optionalString(body.staffId, 'staffId');
   const studentId = optionalString(body.studentId, 'studentId');
   if (!staffId === !studentId) {
-    throw new HttpError(
-      400,
-      'PROFILE_REQUIRED',
-      staffId
-        ? 'A login belongs to one profile: send staffId OR studentId, not both'
-        : 'A login must belong to a profile: send staffId or studentId (orphan accounts are not allowed)',
-    );
+    throw staffId ? Errors.PROFILE_AMBIGUOUS() : Errors.PROFILE_MISSING();
   }
 
   const common = {

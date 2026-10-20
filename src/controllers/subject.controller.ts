@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
+import { Errors } from '../constants/errors';
 import * as subjectService from '../services/subject.service';
-import { HttpError } from '../utils/httpError';
 import {
   bodyOf,
   optionalBoolean,
@@ -61,7 +61,7 @@ export async function remove(req: Request<{ id: string }>, res: Response) {
 export async function assignToGrades(req: Request<{ id: string }>, res: Response) {
   const gradeIds = required(optionalStringArray(bodyOf(req).gradeIds, 'gradeIds'), 'gradeIds');
   if (!gradeIds.length) {
-    throw new HttpError(400, 'VALIDATION_ERROR', 'gradeIds must contain at least one grade id', { field: 'gradeIds' });
+    throw Errors.GRADE_IDS_REQUIRED();
   }
   res.json({ status: 'success', data: await subjectService.assignToGrades(req.params.id, gradeIds) });
 }

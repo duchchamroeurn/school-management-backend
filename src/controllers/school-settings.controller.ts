@@ -1,14 +1,14 @@
 import { Request, Response } from 'express';
+import { Errors } from '../constants/errors';
 import { SchoolLevel } from '../generated/prisma/client';
 import * as schoolSettingsService from '../services/school-settings.service';
-import { HttpError } from '../utils/httpError';
 import { bodyOf, nullablePhone, nullableString, optionalEnum } from '../utils/validate';
 
 // Khmer script (incl. Khmer digits), spaces and common punctuation
 const nullableKhmerText = (value: unknown, field: string) => {
   const text = nullableString(value, field);
   if (text && !/^[ក-៿᧠-᧿\s.,()\-]+$/.test(text)) {
-    throw new HttpError(400, 'VALIDATION_ERROR', `${field} must be written in Khmer script`, { field });
+    throw Errors.KHMER_SCRIPT_REQUIRED(field);
   }
   return text;
 };

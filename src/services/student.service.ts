@@ -1,7 +1,7 @@
+import { Errors } from '../constants/errors';
 import { STUDENT_AGE_RANGE } from '../constants/school-levels';
 import { Gender, Prisma, StudentStatus } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
-import { HttpError } from '../utils/httpError';
 import { getSchoolLevel } from './school-settings.service';
 
 export interface CreateStudentInput {
@@ -31,15 +31,9 @@ const summary = {
   _count: { select: { enrollments: true } },
 } as const;
 
-const notFound = () => new HttpError(404, 'STUDENT_NOT_FOUND', 'Student not found');
 
 const duplicateStudent = (existing: { id: string; studentIdentifier: string; khmerName: string; latinName: string; birthCertificateNo: string }) =>
-  new HttpError(
-    409,
-    'DUPLICATE_STUDENT',
-    `Birth certificate ${existing.birthCertificateNo} is already registered to ${existing.studentIdentifier} ${existing.khmerName} (${existing.latinName})`,
-    { existingStudentId: existing.id, studentIdentifier: existing.studentIdentifier },
-  );
+  Errors.DUPLICATE_STUDENT(existing);
 
 async function assertCertificateFree(birthCertificateNo: string, excludeId?: string) {
   const existing = await prisma.studentProfile.findUnique({ where: { birthCertificateNo } });
@@ -66,9 +60,7 @@ async function assertPlausibleBirthDate(dateOfBirth: Date) {
   const now = new Date();
   const ageAt = (years: number) => new Date(Date.UTC(now.getUTCFullYear() - years, now.getUTCMonth(), now.getUTCDate()));
   if (dateOfBirth > ageAt(min) || dateOfBirth < ageAt(max)) {
-    throw new HttpError(400, 'VALIDATION_ERROR', `dateOfBirth must give an age between ${min} and ${max} for this school`, {
-      field: 'dateOfBirth',
-    });
+    throw Errors.AGE_OUT_OF_RANGE(min, max);
   }
 }
 
@@ -125,7 +117,7 @@ export async function getStudent(id: string) {
       },
     },
   });
-  if (!student) throw notFound();
+  if (!student) throw Errors.STUDENT_NOT_FOUND();
   return student;
 }
 
@@ -150,7 +142,7 @@ export async function createStudent(data: CreateStudentInput) {
 }
 
 export async function updateStudent(id: string, data: UpdateStudentInput) {
-  if (!(await prisma.studentProfile.findUnique({ where: { id } }))) throw notFound();
+  if (!(await prisma.studentProfile.findUnique({ where: { id } }))) throw Errors.STUDENT_NOT_FOUND();
   if (data.dateOfBirth) await assertPlausibleBirthDate(data.dateOfBirth);
   if (data.birthCertificateNo) await assertCertificateFree(data.birthCertificateNo, id);
 
@@ -163,16 +155,12 @@ export async function updateStudent(id: string, data: UpdateStudentInput) {
 // so their history is kept.
 export async function deleteStudent(id: string) {
   const student = await prisma.studentProfile.findUnique({ where: { id }, include: summary });
-  if (!student) throw notFound();
+  if (!student) throw Errors.STUDENT_NOT_FOUND();
   if (student._count.enrollments > 0) {
-    throw new HttpError(
-      409,
-      'STUDENT_HAS_HISTORY',
-      `Student ${student.studentIdentifier} has ${student._count.enrollments} enrollment(s). Set status to DROPPED_OUT or GRADUATED instead of deleting.`,
-    );
+    throw Errors.STUDENT_HAS_HISTORY(student.studentIdentifier, student._count.enrollments);
   }
   if (student.user) {
-    throw new HttpError(409, 'STUDENT_HAS_LOGIN', `Student ${student.studentIdentifier} has a login account; remove it first`);
+    throw Errors.STUDENT_HAS_LOGIN(student.studentIdentifier);
   }
   await prisma.studentProfile.delete({ where: { id } });
 }

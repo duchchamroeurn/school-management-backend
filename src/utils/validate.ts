@@ -1,10 +1,10 @@
 // Small request-validation helpers. Each `optional*` returns undefined when the field is absent
 // (meaning "don't change" for PATCH); `required` turns absence into a 400.
 import { Request } from 'express';
-import { HttpError } from './httpError';
+import { Errors } from '../constants/errors';
 
 const invalid = (field: string, message: string) =>
-  new HttpError(400, 'VALIDATION_ERROR', `${field} ${message}`, { field });
+  Errors.INVALID_FIELD(field, message);
 
 export const bodyOf = (req: Request) => (req.body ?? {}) as Record<string, unknown>;
 

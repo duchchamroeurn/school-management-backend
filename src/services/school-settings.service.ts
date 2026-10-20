@@ -1,8 +1,8 @@
 import { DEFAULT_SUBJECTS } from '../constants/curriculum';
+import { Errors } from '../constants/errors';
 import { educationLevelOf, GRADE_RANGE, gradesFor, isSchoolLevel, LEVEL_LABEL } from '../constants/school-levels';
 import { Prisma, SchoolLevel } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
-import { HttpError } from '../utils/httpError';
 
 const SETTINGS_ID = 1;
 
@@ -59,9 +59,7 @@ export async function assertGradeOffered(gradeNumber: number) {
   const level = await getSchoolLevel();
   const { min, max } = GRADE_RANGE[level];
   if (gradeNumber < min || gradeNumber > max) {
-    throw new HttpError(400, 'GRADE_NOT_OFFERED', `Grade ${gradeNumber} is not offered: this school is ${LEVEL_LABEL[level]}`, {
-      allowedGrades: gradesFor(level),
-    });
+    throw Errors.GRADE_NOT_OFFERED(gradeNumber, LEVEL_LABEL[level], gradesFor(level));
   }
 }
 
@@ -107,11 +105,9 @@ export async function updateSchoolSettings(data: UpdateSchoolSettingsInput) {
       });
       const inUse = outside.filter((g) => g._count.classes > 0);
       if (inUse.length) {
-        throw new HttpError(
-          409,
-          'LEVEL_CHANGE_BLOCKED',
-          `Cannot switch to ${LEVEL_LABEL[data.level]}: grade(s) ${inUse.map((g) => g.gradeNumber).join(', ')} still have class sections`,
-          { gradesInUse: inUse.map((g) => ({ gradeNumber: g.gradeNumber, classSections: g._count.classes })) },
+        throw Errors.LEVEL_CHANGE_BLOCKED(
+          LEVEL_LABEL[data.level],
+          inUse.map((g) => ({ gradeNumber: g.gradeNumber, classSections: g._count.classes })),
         );
       }
       // Grade-subject links cascade with the grade

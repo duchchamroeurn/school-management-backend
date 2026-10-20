@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
+import { Errors } from '../constants/errors';
 import { prisma } from '../lib/prisma';
-import { HttpError } from '../utils/httpError';
 import { verifyAccessToken } from '../utils/jwt';
 
 interface AuthenticateOptions {
@@ -15,14 +15,14 @@ export const authenticate =
   async (req: Request, _res: Response, next: NextFunction) => {
     const header = req.headers.authorization;
     if (!header?.startsWith('Bearer ')) {
-      throw new HttpError(401, 'UNAUTHENTICATED', 'Missing bearer token');
+      throw Errors.MISSING_TOKEN();
     }
 
     let payload;
     try {
       payload = verifyAccessToken(header.slice('Bearer '.length));
     } catch {
-      throw new HttpError(401, 'UNAUTHENTICATED', 'Invalid or expired token');
+      throw Errors.INVALID_TOKEN();
     }
 
     const user = await prisma.user.findUnique({
@@ -31,14 +31,14 @@ export const authenticate =
     });
 
     if (!user || user.status !== 'ACTIVE') {
-      throw new HttpError(401, 'UNAUTHENTICATED', 'Account is not active');
+      throw Errors.ACCOUNT_INACTIVE();
     }
     // JWT iat is in seconds; reject tokens issued before the last password change
     if (user.passwordChangedAt && payload.iat < Math.floor(user.passwordChangedAt.getTime() / 1000)) {
-      throw new HttpError(401, 'UNAUTHENTICATED', 'Token was issued before the last password change');
+      throw Errors.TOKEN_REVOKED();
     }
     if (user.mustChangePassword && !allowPendingPasswordChange) {
-      throw new HttpError(403, 'PASSWORD_CHANGE_REQUIRED', 'You must change your password before continuing');
+      throw Errors.PASSWORD_CHANGE_REQUIRED();
     }
 
     req.user = {

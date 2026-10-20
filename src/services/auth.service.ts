@@ -1,5 +1,5 @@
+import { Errors } from '../constants/errors';
 import { prisma } from '../lib/prisma';
-import { HttpError } from '../utils/httpError';
 import { signAccessToken } from '../utils/jwt';
 import { checkPasswordPolicy, DUMMY_HASH, hashPassword, verifyPassword } from '../utils/password';
 
@@ -29,10 +29,10 @@ export async function login(username: string, password: string): Promise<LoginRe
   // The password is checked before the status so a wrong guess can't discover that an account is suspended.
   const passwordOk = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH);
   if (!user || !passwordOk) {
-    throw new HttpError(401, 'INVALID_CREDENTIALS', 'Invalid username or password');
+    throw Errors.INVALID_CREDENTIALS();
   }
   if (user.status !== 'ACTIVE') {
-    throw new HttpError(403, 'ACCOUNT_SUSPENDED', 'This account is suspended');
+    throw Errors.ACCOUNT_SUSPENDED();
   }
 
   await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
@@ -53,15 +53,15 @@ export async function login(username: string, password: string): Promise<LoginRe
 export async function changePassword(userId: string, currentPassword: string, newPassword: string) {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
   if (!(await verifyPassword(currentPassword, user.passwordHash))) {
-    throw new HttpError(401, 'INVALID_CREDENTIALS', 'Current password is incorrect');
+    throw Errors.WRONG_CURRENT_PASSWORD();
   }
 
   const problems = checkPasswordPolicy(newPassword);
   if (problems.length) {
-    throw new HttpError(400, 'WEAK_PASSWORD', `Password must contain ${problems.join(', ')}`, problems);
+    throw Errors.WEAK_PASSWORD('Password', problems);
   }
   if (newPassword === currentPassword) {
-    throw new HttpError(400, 'WEAK_PASSWORD', 'New password must be different from the current password');
+    throw Errors.PASSWORD_UNCHANGED();
   }
 
   // Truncate to whole seconds so tokens issued right after this (same-second iat) remain valid

@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
+import { Errors } from '../constants/errors';
 import * as authService from '../services/auth.service';
-import { HttpError } from '../utils/httpError';
 
 const asString = (value: unknown) => (typeof value === 'string' ? value : '');
 
@@ -10,7 +10,7 @@ export async function login(req: Request, res: Response) {
   const username = asString(req.body?.username).trim().toLowerCase();
   const password = asString(req.body?.password);
   if (!username || !password) {
-    throw new HttpError(400, 'VALIDATION_ERROR', 'username and password are required');
+    throw Errors.CREDENTIALS_REQUIRED();
   }
 
   const result = await authService.login(username, password);
@@ -22,7 +22,7 @@ export async function changePassword(req: Request, res: Response) {
   const currentPassword = asString(req.body?.currentPassword);
   const newPassword = asString(req.body?.newPassword);
   if (!currentPassword || !newPassword) {
-    throw new HttpError(400, 'VALIDATION_ERROR', 'currentPassword and newPassword are required');
+    throw Errors.PASSWORDS_REQUIRED();
   }
 
   const result = await authService.changePassword(req.user!.id, currentPassword, newPassword);

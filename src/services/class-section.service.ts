@@ -1,6 +1,6 @@
+import { Errors } from '../constants/errors';
 import { AcademicYearStatus, Prisma } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
-import { HttpError } from '../utils/httpError';
 
 export interface CreateClassSectionInput {
   sectionName: string; // e.g., "A"
@@ -26,34 +26,29 @@ export const classSectionDetails = {
   _count: { select: { enrollments: true } },
 } as const;
 
-const notFound = () => new HttpError(404, 'CLASS_SECTION_NOT_FOUND', 'Class section not found');
 
 const classSectionExists = (gradeNumber: number, sectionName: string, academicYearName: string) =>
-  new HttpError(
-    409,
-    'CLASS_SECTION_EXISTS',
-    `Class ${gradeNumber}${sectionName} already exists for academic year ${academicYearName}`,
-  );
+  Errors.CLASS_SECTION_EXISTS(`${gradeNumber}${sectionName}`, academicYearName);
 
 const yearClosed = (academicYearName: string) =>
-  new HttpError(409, 'ACADEMIC_YEAR_CLOSED', `Academic year ${academicYearName} is completed; its classes can no longer be changed`);
+  Errors.ACADEMIC_YEAR_CLOSED(academicYearName, 'its classes');
 
 // Normalise so "a", " A" and "A" can't become three different sections
 function normaliseSectionName(sectionName: string) {
   const normalised = sectionName.trim().toUpperCase();
-  if (!normalised) throw new HttpError(400, 'VALIDATION_ERROR', 'sectionName is required');
+  if (!normalised) throw Errors.SECTION_NAME_REQUIRED();
   return normalised;
 }
 
 function assertCapacity(maxCapacity: number) {
   if (!Number.isInteger(maxCapacity) || maxCapacity < 1 || maxCapacity > MAX_CAPACITY_LIMIT) {
-    throw new HttpError(400, 'VALIDATION_ERROR', `maxCapacity must be a whole number between 1 and ${MAX_CAPACITY_LIMIT}`);
+    throw Errors.CAPACITY_OUT_OF_RANGE(MAX_CAPACITY_LIMIT);
   }
 }
 
 async function assertTeacherExists(homeroomTeacherId: string) {
   if (!(await prisma.staffProfile.findUnique({ where: { id: homeroomTeacherId } }))) {
-    throw new HttpError(404, 'TEACHER_NOT_FOUND', 'Homeroom teacher (staff profile) not found');
+    throw Errors.TEACHER_NOT_FOUND();
   }
 }
 
@@ -64,12 +59,7 @@ export async function assertTeacherFreeForYear(homeroomTeacherId: string, academ
     include: { grade: true, academicYear: true, homeroomTeacher: true },
   });
   if (other) {
-    throw new HttpError(
-      409,
-      'TEACHER_ALREADY_ASSIGNED',
-      `${other.homeroomTeacher!.latinName} (${other.homeroomTeacher!.khmerName}) is already homeroom teacher of class ${other.grade.gradeNumber}${other.sectionName} in ${other.academicYear.name}`,
-      { classSectionId: other.id },
-    );
+    throw Errors.TEACHER_ALREADY_ASSIGNED(other.homeroomTeacher!, `${other.grade.gradeNumber}${other.sectionName}`, other.academicYear.name, other.id);
   }
 }
 
@@ -93,7 +83,7 @@ export async function guardUnique<T>(write: () => Promise<T>, recheck: () => Pro
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
       await recheck();
-      throw new HttpError(409, 'CONFLICT', 'A conflicting change was made at the same time; please retry');
+      throw Errors.CONFLICT();
     }
     throw err;
   }
@@ -109,7 +99,7 @@ export function listClassSections(filter: { academicYearId?: string; gradeId?: s
 
 export async function getClassSection(id: string) {
   const classSection = await prisma.classSection.findUnique({ where: { id }, include: classSectionDetails });
-  if (!classSection) throw notFound();
+  if (!classSection) throw Errors.CLASS_SECTION_NOT_FOUND();
   return classSection;
 }
 
@@ -121,8 +111,8 @@ export async function createClassSection(data: CreateClassSectionInput) {
     prisma.grade.findUnique({ where: { id: data.gradeId } }),
     prisma.academicYear.findUnique({ where: { id: data.academicYearId } }),
   ]);
-  if (!grade) throw new HttpError(404, 'GRADE_NOT_FOUND', 'Grade not found');
-  if (!academicYear) throw new HttpError(404, 'ACADEMIC_YEAR_NOT_FOUND', 'Academic year not found');
+  if (!grade) throw Errors.GRADE_NOT_FOUND();
+  if (!academicYear) throw Errors.ACADEMIC_YEAR_NOT_FOUND();
   if (academicYear.status === AcademicYearStatus.COMPLETED) throw yearClosed(academicYear.name);
 
   const checks = async () => {
@@ -157,11 +147,7 @@ export async function updateClassSection(id: string, data: UpdateClassSectionInp
   if (data.maxCapacity !== undefined) {
     assertCapacity(data.maxCapacity);
     if (data.maxCapacity < existing._count.enrollments) {
-      throw new HttpError(
-        409,
-        'CAPACITY_BELOW_ENROLLMENT',
-        `maxCapacity cannot be lower than the ${existing._count.enrollments} student(s) already enrolled`,
-      );
+      throw Errors.CAPACITY_BELOW_ENROLLMENT(existing._count.enrollments);
     }
   }
 
@@ -187,11 +173,7 @@ export async function deleteClassSection(id: string) {
   const existing = await getClassSection(id);
   if (existing.academicYear.status === AcademicYearStatus.COMPLETED) throw yearClosed(existing.academicYear.name);
   if (existing._count.enrollments > 0) {
-    throw new HttpError(
-      409,
-      'CLASS_SECTION_IN_USE',
-      `Class ${existing.grade.gradeNumber}${existing.sectionName} has ${existing._count.enrollments} enrolled student(s); it cannot be deleted`,
-    );
+    throw Errors.CLASS_SECTION_IN_USE(`${existing.grade.gradeNumber}${existing.sectionName}`, existing._count.enrollments);
   }
   await prisma.classSection.delete({ where: { id } });
 }
