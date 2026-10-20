@@ -184,6 +184,49 @@
       ]
     },
     {
+      "name": "Dashboard",
+      "description": "Role-based summary: GET /dashboard.",
+      "item": [
+        {
+          "name": "Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dashboard"
+              ],
+              "query": [
+                {
+                  "key": "academicYearId",
+                  "value": "{{academicYearId}}",
+                  "disabled": true,
+                  "description": "Defaults to the ACTIVE year"
+                }
+              ]
+            },
+            "description": "Summary sections for the signed-in user, each included only when their permissions allow it (principal: school-wide; teacher: myHomeroom, myScoreEntry; student: myStudent)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('has sections', () => pm.expect(pm.response.json().data).to.have.property('sections'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Me (own data)",
       "description": "Self-service views for the signed-in login. Log in as demo.student or demo.teacher to try them.",
       "item": [

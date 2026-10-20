@@ -238,6 +238,7 @@ All routes are prefixed with `/api/v1`. Except for `/health` and `/auth/login`, 
 | Health | `GET /health` |
 | Auth | `POST /auth/login`, `POST /auth/change-password`, `GET /auth/me` |
 | Me (own data) | `GET /me/profile`, `GET /me/homeroom?academicYear=` |
+| Dashboard | `GET /dashboard?academicYearId=` |
 | Teacher | `GET /teacher/my-classes?academicYear=` |
 | Audit log | `GET /audit-logs` |
 | Assessment periods | CRUD on `/assessment-periods`, plus `POST /:id/lock`, `POST /:id/unlock`, `PUT/DELETE /:id/subjects/:subjectId` and `POST /:id/copy-rules` |
@@ -268,6 +269,31 @@ These endpoints always use the signed-in login's own profile, never an id from t
 - `GET /me/homeroom` (`VIEW_OWN_HOMEROOM`): the roster of the class the signed-in teacher is homeroom teacher of, in the same format as `GET /class-sections/:id/roster`.
   - Defaults to the ACTIVE academic year. Pass `?academicYear=2025-2026` for another year.
   - Returns `404 NO_HOMEROOM_CLASS` if they have no homeroom class that year.
+
+### Dashboard
+
+`GET /dashboard` returns a summary for the signed-in user, covering the ACTIVE academic year by default or `?academicYearId=`. Each section appears only if the user holds the permission behind it, so built-in and custom roles get exactly what their permissions allow. Sections return numbers and ids only, and the frontend supplies the labels.
+
+| Section | Shown with | What it holds |
+| --- | --- | --- |
+| `enrollment` | `CREATE_ENROLLMENT` | Active students (total and girls) by grade; new admissions, promoted, repeating; dropouts and graduates; students not placed in a class this year |
+| `capacity` | `CREATE_ENROLLMENT` | Seats used and left per class, and full classes |
+| `attendanceToday` | `VIEW_ANY_ATTENDANCE` | Today's daily attendance across the school, the attendance rate, and classes not marked yet |
+| `scoreEntry` | `MANAGE_ASSESSMENT_RULES` or `ENTER_ANY_SCORES` | For each open period: scores entered vs expected, the deadline, and classes with results |
+| `staffing` | `UPDATE_CLASS_SECTION` or `UPDATE_STAFF` | Classes without a homeroom teacher, and subjects without a teacher in each class |
+| `dataQuality` | `UPDATE_STUDENT` | Active students with no guardian, or no guardian phone |
+| `pendingLeave` | `REVIEW_LEAVE_REQUEST` | Leave requests waiting for a decision |
+| `security` | `LIST_AUDIT_LOGS` | Last 24 h: failed logins, account locks, logins from outside the school network; user counts (with `LIST_USERS`) |
+| `myScoreEntry` | `ENTER_SCORES` + assignments | For each of the teacher's subjects and classes, per open period: scores entered and remaining |
+| `myHomeroom` | `VIEW_OWN_HOMEROOM` + a homeroom class | Students, today's attendance, frequent absentees (≥ 3 unexcused absences in 30 days), pending leave, and which periods have results |
+| `myStudent` | `VIEW_OWN_PROFILE` + a student login | Class and homeroom teacher, latest result, this month's attendance, recent leave requests |
+
+What each role sees by default:
+- **Principal:** every school-wide section.
+- **Registrar:** `enrollment`, `capacity`, `attendanceToday` and `dataQuality`.
+- **Teacher:** `myHomeroom` and `myScoreEntry`.
+- **Student:** `myStudent`.
+- **System Admin:** everything.
 
 ### Guardians
 

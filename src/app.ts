@@ -12,6 +12,7 @@ import { attendanceRoutes, leaveRequestRoutes } from './routes/attendance.routes
 import auditLogRoutes from './routes/audit-log.routes';
 import authRoutes from './routes/auth.routes';
 import classSectionRoutes from './routes/class-section.routes';
+import dashboardRoutes from './routes/dashboard.routes';
 import enrollmentRoutes from './routes/enrollment.routes';
 import gradeRoutes from './routes/grade.routes';
 import gradingRoutes from './routes/grading.routes';
@@ -48,6 +49,7 @@ app.use(express.json());
 app.use('/api/v1/health', healthRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/me', meRoutes);
+app.use('/api/v1/dashboard', dashboardRoutes);
 app.use('/api/v1/school-settings', schoolSettingsRoutes);
 app.use('/api/v1/grades', gradeRoutes);
 app.use('/api/v1/subjects', subjectRoutes);
