@@ -12,7 +12,11 @@
     "db:seed:students": "tsx src/utils/seed-students.ts",
     "db:seed:staff": "tsx src/utils/seed-staff.ts",
     "db:seed:demo": "tsx src/utils/seed-demo.ts",
-    "db:reset:demo": "tsx src/utils/seed-demo.ts --reset"
+    "db:reset:demo": "tsx src/utils/seed-demo.ts --reset",
+    "demo:install": "tsx src/utils/demo-install.ts",
+    "demo:install:lower": "tsx src/utils/demo-install.ts --level lower",
+    "demo:install:upper": "tsx src/utils/demo-install.ts --level upper",
+    "demo:install:combined": "tsx src/utils/demo-install.ts --level combined"
   },
   "keywords": [],
   "author": "",
