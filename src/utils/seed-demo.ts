@@ -1,17 +1,21 @@
 // Builds a complete demo school on top of the imported students/staff so every feature can be tested.
 // Everything goes through the service layer, so demo data obeys the same rules as the API.
+// Classes are created only for the grades the school level offers (see /api/v1/school-settings).
 //
-//   npm run db:seed:demo                       # build the demo (once; refuses if already built)
-//   npm run db:reset:demo                      # remove demo data, restore the years, rebuild (asks for --confirm)
+//   npm run db:seed:demo                        # build the demo (once; refuses if already built)
+//   npm run db:reset:demo -- --confirm          # remove demo data, restore the years, rebuild
+//   npm run db:reset:demo -- --confirm --clear  # remove demo data only (e.g. before changing school level)
 //
-// Requires: npm run db:seed (reference data), db:seed:students and db:seed:staff (≥ 100 / ≥ 24 records).
+// Requires: npm run db:seed (reference data), db:seed:students and db:seed:staff (≥ 80 / ≥ 24 records).
 // Never runs automatically and refuses to run with NODE_ENV=production.
 import { SYSTEM_ROLES } from '../constants/roles';
+import { gradesFor, LEVEL_LABEL } from '../constants/school-levels';
 import { AcademicYearStatus, EnrollmentType, StudentStatus, UserStatus } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
 import { createAcademicYear, updateAcademicYear } from '../services/academic-year.service';
 import { createClassSection } from '../services/class-section.service';
 import { enrollContinuingStudent, enrollStudentInClass } from '../services/enrollment.service';
+import { getSchoolLevel } from '../services/school-settings.service';
 import { assignHomeroom } from '../services/staff.service';
 import { updateStudent } from '../services/student.service';
 import { createLogin, setStatus } from '../services/user.service';
@@ -20,6 +24,11 @@ import { hashPassword } from './password';
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD || 'Demo@1234';
 const CAPACITY = 12;
 const SECTIONS = ['A', 'B'];
+// Students placed per class, in order (lowest grade A, B, next grade A, B, …); remaining classes stay empty.
+// Gives one exactly-full class (first), one with a single free seat, and later partially filled ones.
+const FILL_PATTERN = [12, 11, 12, 12, 10, 10, 10, 10];
+const REPEATER_CLASS = 5; // index into the class list: third grade, section B
+const DROPOUT_CLASS = 2; // second grade, section A — one student drops out, freeing a seat
 
 const LAST_YEAR = '2025-2026';
 const CURRENT_YEAR = '2026-2027';
@@ -34,7 +43,7 @@ const log = (msg: string) => console.log(`  ${msg}`);
 // ==========================================
 
 async function resetDemo() {
-  console.log('Resetting demo data…');
+  console.log('Removing demo data…');
   await prisma.$transaction(async (tx) => {
     const users = await tx.user.deleteMany({ where: { username: { startsWith: DEMO_USERNAME_PREFIX } } });
     const enrollments = await tx.yearlyEnrollment.deleteMany({ where: { academicYear: { name: { in: DEMO_YEARS } } } });
@@ -55,46 +64,58 @@ async function resetDemo() {
 
 async function seedDemo() {
   if (await prisma.academicYear.findUnique({ where: { name: NEXT_YEAR.name } })) {
-    console.log(`Demo data already exists (academic year ${NEXT_YEAR.name} found). Run "npm run db:reset:demo" to rebuild it.`);
+    console.log(`Demo data already exists (academic year ${NEXT_YEAR.name} found). Run "npm run db:reset:demo -- --confirm" to rebuild it.`);
     return;
   }
 
-  // Deterministic ordering so every run produces the same school
-  const students = await prisma.studentProfile.findMany({ orderBy: [{ dateOfBirth: 'asc' }, { studentIdentifier: 'asc' }] });
+  const level = await getSchoolLevel();
+  const offered = gradesFor(level);
+  const grades = Object.fromEntries((await prisma.grade.findMany()).map((g) => [g.gradeNumber, g]));
+  const missing = offered.filter((n) => !grades[n]);
+  if (missing.length) throw new Error(`Grade(s) ${missing.join(', ')} missing — run "npm run db:seed" first`);
+
+  // Youngest first: younger students go into lower grades. Deterministic so every run builds the same school.
+  const pool = await prisma.studentProfile.findMany({ orderBy: [{ dateOfBirth: 'desc' }, { studentIdentifier: 'asc' }] });
   const staff = await prisma.staffProfile.findMany({ orderBy: { nationalIdNo: 'asc' } });
-  if (students.length < 100 || staff.length < 24) {
-    throw new Error(`Need ≥ 100 students and ≥ 24 staff (found ${students.length} / ${staff.length}). Run db:seed:students and db:seed:staff first.`);
+  if (pool.length < 80 || staff.length < 24) {
+    throw new Error(`Need ≥ 80 students and ≥ 24 staff (found ${pool.length} / ${staff.length}). Run db:seed:students and db:seed:staff first.`);
   }
-  if (await prisma.yearlyEnrollment.count()) throw new Error('Enrollments already exist; run "npm run db:reset:demo" to start from a clean state.');
+  if (await prisma.yearlyEnrollment.count()) throw new Error('Enrollments already exist; run "npm run db:reset:demo -- --confirm" to start from a clean state.');
 
-  const byYear = (y: number) => students.filter((s) => s.dateOfBirth.getUTCFullYear() === y);
-  const [s2012, s2013, s2014] = [byYear(2012), byYear(2013), byYear(2014)];
+  // Special cases are taken from the oldest students
+  const graduate = pool.pop()!; // top grade last year → GRADUATED (cannot be enrolled)
+  const repeater = pool.pop()!; // repeats the third grade
+  const notNewAdmission = [pool.pop()!, pool.pop()!]; // enrolled last year, not this year
 
-  // Cohorts (oldest first within each birth year)
-  const repeater = s2012[0]; // grade 9 last year, repeats grade 9
-  const graduate = s2012[1]; // grade 9 last year, status GRADUATED (cannot be enrolled)
-  const grade10 = s2012.slice(2, 22); // 20 → promoted from 9A last year
-  const grade9 = s2013.slice(0, 20); // 20 → promoted from 8A last year
-  const notNewAdmission = s2013.slice(20, 22); // enrolled last year, not this year → NOT_A_NEW_ADMISSION when enrolled as new
-  const grade8 = s2013.slice(22, 46); // 24 → new admissions
-  const grade7 = s2014.slice(0, 23); // 23 → 7A full (12), 7B 11/12
+  console.log(`Seeding demo school — ${LEVEL_LABEL[level]}…`);
 
-  console.log('Seeding demo school…');
+  // Classes this year in order 7A, 7B, 8A, … with the students planned for each
+  const plan = offered.flatMap((gradeNumber, gradeIndex) =>
+    SECTIONS.map((sectionName) => ({ gradeNumber, gradeIndex, sectionName })),
+  ).map((c, i) => ({ ...c, students: pool.splice(0, FILL_PATTERN[i] ?? 0) }));
 
-  // ── 1. Last year (2025-2026): history classes + enrollments, then complete it
+  // ── 1. Last year: one history class per grade, enroll everyone who continues, then complete it
   const lastYear = await prisma.academicYear.findUnique({ where: { name: LAST_YEAR } });
   if (!lastYear) throw new Error(`Academic year ${LAST_YEAR} not found`);
   if (lastYear.status === AcademicYearStatus.COMPLETED) await updateAcademicYear(lastYear.id, { status: AcademicYearStatus.ACTIVE });
-  const grades = Object.fromEntries((await prisma.grade.findMany()).map((g) => [g.gradeNumber, g]));
 
-  const last8A = await createClassSection({ sectionName: 'A', maxCapacity: 40, gradeId: grades[8].id, academicYearId: lastYear.id });
-  const last9A = await createClassSection({ sectionName: 'A', maxCapacity: 40, gradeId: grades[9].id, academicYearId: lastYear.id });
-  await assignHomeroom({ staffId: staff[0].id, classSectionId: last8A.id, academicYearName: LAST_YEAR });
-  await assignHomeroom({ staffId: staff[1].id, classSectionId: last9A.id, academicYearName: LAST_YEAR });
-  for (const s of [...grade9, ...notNewAdmission]) await enrollStudentInClass(s.id, last8A.id, lastYear.id);
-  for (const s of [...grade10, repeater, graduate]) await enrollStudentInClass(s.id, last9A.id, lastYear.id);
+  const lastYearClass: Record<number, { id: string }> = {};
+  for (const [i, gradeNumber] of offered.entries()) {
+    lastYearClass[gradeNumber] = await createClassSection({ sectionName: 'A', maxCapacity: 40, gradeId: grades[gradeNumber].id, academicYearId: lastYear.id });
+    await assignHomeroom({ staffId: staff[i].id, classSectionId: lastYearClass[gradeNumber].id, academicYearName: LAST_YEAR });
+  }
+  const lowest = offered[0];
+  const top = offered[offered.length - 1];
+  const third = offered[Math.min(2, offered.length - 1)];
+  // Students above the lowest grade were one grade lower last year
+  for (const c of plan.filter((c) => c.gradeIndex > 0)) {
+    for (const s of c.students) await enrollStudentInClass(s.id, lastYearClass[offered[c.gradeIndex - 1]].id, lastYear.id);
+  }
+  await enrollStudentInClass(repeater.id, lastYearClass[third].id, lastYear.id);
+  await enrollStudentInClass(graduate.id, lastYearClass[top].id, lastYear.id);
+  for (const s of notNewAdmission) await enrollStudentInClass(s.id, lastYearClass[lowest].id, lastYear.id);
   await updateAcademicYear(lastYear.id, { status: AcademicYearStatus.COMPLETED });
-  log(`✓ ${LAST_YEAR}: classes 8A (22) + 9A (22) with homeroom teachers → COMPLETED`);
+  log(`✓ ${LAST_YEAR}: ${offered.length} history classes (${offered.map((n) => `${n}A`).join(', ')}) with homeroom teachers → COMPLETED`);
 
   // ── 2. Current year ACTIVE, next year UPCOMING
   const currentYear = await prisma.academicYear.findUnique({ where: { name: CURRENT_YEAR } });
@@ -103,41 +124,32 @@ async function seedDemo() {
   await createAcademicYear({ ...NEXT_YEAR, status: AcademicYearStatus.UPCOMING });
   log(`✓ ${CURRENT_YEAR} → ACTIVE, ${NEXT_YEAR.name} created (UPCOMING)`);
 
-  // ── 3. Current year: grades 7–12 × A/B, one homeroom teacher each
-  const cls: Record<string, { id: string }> = {};
-  let teacher = 0;
-  for (const gradeNumber of [7, 8, 9, 10, 11, 12]) {
-    for (const sectionName of SECTIONS) {
-      const c = await createClassSection({ sectionName, maxCapacity: CAPACITY, gradeId: grades[gradeNumber].id, academicYearId: currentYear.id });
-      await assignHomeroom({ staffId: staff[teacher++].id, classSectionId: c.id, academicYearName: CURRENT_YEAR });
-      cls[`${gradeNumber}${sectionName}`] = c;
+  // ── 3. Current year: every offered grade × A/B, one homeroom teacher each
+  const classes = [];
+  for (const [i, c] of plan.entries()) {
+    const created = await createClassSection({ sectionName: c.sectionName, maxCapacity: CAPACITY, gradeId: grades[c.gradeNumber].id, academicYearId: currentYear.id });
+    await assignHomeroom({ staffId: staff[i].id, classSectionId: created.id, academicYearName: CURRENT_YEAR });
+    classes.push({ ...c, id: created.id, name: `${c.gradeNumber}${c.sectionName}` });
+  }
+  log(`✓ ${CURRENT_YEAR}: ${classes.length} class sections (${classes[0].name}–${classes[classes.length - 1].name}, capacity ${CAPACITY}), homeroom teachers = first ${classes.length} staff`);
+
+  // ── 4. Current year enrollments: lowest grade = new admissions, others promoted from last year
+  for (const c of classes) {
+    for (const s of c.students) {
+      if (c.gradeIndex === 0) await enrollStudentInClass(s.id, c.id, currentYear.id);
+      else await enrollContinuingStudent(s.id, c.id, currentYear.id, EnrollmentType.PROMOTED);
     }
   }
-  log(`✓ ${CURRENT_YEAR}: 12 class sections (7A–12B, capacity ${CAPACITY}), homeroom teachers = first 12 staff`);
-
-  // ── 4. Current year enrollments
-  const enrollNew = async (list: typeof students, className: string) => {
-    for (const s of list) await enrollStudentInClass(s.id, cls[className].id, currentYear.id);
-  };
-  const enrollContinuing = async (list: typeof students, className: string, type: 'PROMOTED' | 'REPEATING') => {
-    for (const s of list) await enrollContinuingStudent(s.id, cls[className].id, currentYear.id, EnrollmentType[type]);
-  };
-  await enrollNew(grade7.slice(0, 12), '7A');
-  await enrollNew(grade7.slice(12), '7B');
-  await enrollNew(grade8.slice(0, 12), '8A');
-  await enrollNew(grade8.slice(12), '8B');
-  await enrollContinuing(grade9.slice(0, 10), '9A', 'PROMOTED');
-  await enrollContinuing(grade9.slice(10), '9B', 'PROMOTED');
-  await enrollContinuing([repeater], '9B', 'REPEATING');
-  await enrollContinuing(grade10.slice(0, 10), '10A', 'PROMOTED');
-  await enrollContinuing(grade10.slice(10), '10B', 'PROMOTED');
-  log('✓ enrollments: 7A 12 (FULL) · 7B 11 · 8A 12 · 8B 12 (FULL) · 9A 10 · 9B 11 (incl. 1 REPEATING) · 10A 10 · 10B 10 · 11–12 empty');
+  const repeaterClass = classes[Math.min(REPEATER_CLASS, classes.length - 1)];
+  await enrollContinuingStudent(repeater.id, repeaterClass.id, currentYear.id, EnrollmentType.REPEATING);
+  log(`✓ enrollments: ${classes.map((c) => `${c.name} ${c.students.length + (c === repeaterClass ? 1 : 0)}`).join(' · ')} (${repeaterClass.name} incl. 1 REPEATING)`);
 
   // ── 5. Student statuses
-  const dropout = grade8[11]; // last student placed in 8A
+  const dropoutClass = classes[DROPOUT_CLASS];
+  const dropout = dropoutClass.students[dropoutClass.students.length - 1];
   await updateStudent(dropout.id, { status: StudentStatus.DROPPED_OUT });
   await updateStudent(graduate.id, { status: StudentStatus.GRADUATED });
-  log(`✓ ${dropout.studentIdentifier} DROPPED_OUT (8A seat freed: 11/12) · ${graduate.studentIdentifier} GRADUATED`);
+  log(`✓ ${dropout.studentIdentifier} DROPPED_OUT (${dropoutClass.name} seat freed) · ${graduate.studentIdentifier} GRADUATED`);
 
   // ── 6. Demo logins (one per role + edge cases)
   const roles = Object.fromEntries((await prisma.role.findMany()).map((r) => [r.latinName, r.id]));
@@ -145,10 +157,10 @@ async function seedDemo() {
   const accounts = [
     { username: 'demo.principal', staffId: staff[20].id, role: 'Principal' },
     { username: 'demo.registrar', staffId: staff[21].id, role: 'Registrar' },
-    { username: 'demo.teacher', staffId: staff[0].id, role: 'Teacher' }, // homeroom teacher of 7A
+    { username: 'demo.teacher', staffId: staff[0].id, role: 'Teacher' }, // homeroom teacher of the first class
     { username: 'demo.newstaff', staffId: staff[22].id, role: 'Teacher', mustChangePassword: true },
     { username: 'demo.suspended', staffId: staff[23].id, role: 'Teacher', suspended: true },
-    { username: 'demo.student', studentId: grade7[0].id, role: SYSTEM_ROLES.STUDENT }, // in 7A
+    { username: 'demo.student', studentId: classes[0].students[0].id, role: SYSTEM_ROLES.STUDENT }, // in the first class
   ];
   for (const a of accounts) {
     const profile = a.staffId ? { staffId: a.staffId } : { studentId: a.studentId! };
@@ -165,7 +177,7 @@ async function seedDemo() {
     orderBy: [{ grade: { gradeNumber: 'asc' } }, { sectionName: 'asc' }],
   });
   const unenrolled = await prisma.studentProfile.count({ where: { enrollments: { none: { academicYearId: currentYear.id } } } });
-  console.log(`\nDemo school ready — ${CURRENT_YEAR} (ACTIVE):`);
+  console.log(`\nDemo school ready — ${CURRENT_YEAR} (ACTIVE), ${LEVEL_LABEL[level]}:`);
   for (const c of rosters) {
     const active = c.enrollments.filter((e) => e.student.status === StudentStatus.ENROLLED).length;
     const flag = active >= c.maxCapacity ? '  ← FULL' : active === 0 ? '  (empty)' : '';
@@ -184,12 +196,13 @@ async function main() {
     if (!process.argv.includes('--confirm')) {
       console.error(
         `This deletes all class sections and enrollments in ${DEMO_YEARS.join(', ')}, every "${DEMO_USERNAME_PREFIX}*" login and resets all student statuses.\n` +
-          'Re-run with --confirm to proceed:  npm run db:reset:demo -- --confirm',
+          'Re-run with --confirm to proceed:  npm run db:reset:demo -- --confirm   (add --clear to skip rebuilding)',
       );
       process.exitCode = 1;
       return;
     }
     await resetDemo();
+    if (process.argv.includes('--clear')) return;
   }
   await seedDemo();
 }
