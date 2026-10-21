@@ -2,7 +2,7 @@
 // SubjectAssessmentConfig for (subject, assessment period), never from the subject itself. So Math can be
 // entered as one total in January and as Homework + Oral + Exam in February.
 import { Errors } from '../constants/errors';
-import { AcademicYearStatus } from '../generated/prisma/client';
+import { AcademicYearStatus, StudentStatus } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
 import { assertConfigComponentsValid } from '../utils/assessment';
 import { isoDate, todayAtSchool } from '../utils/dates';
@@ -189,4 +189,109 @@ export async function recordSubjectScore(actor: ScoreActor, input: RecordSubject
       },
     };
   });
+}
+
+/** Why a score sheet can't be edited right now (null = it can). */
+export type SheetLockReason = 'PERIOD_LOCKED' | 'YEAR_COMPLETED' | 'DEADLINE_PASSED' | 'NO_RULES';
+
+/**
+ * The score sheet of one subject in one class for one period: the period's rules for the subject and every
+ * active student with the total and component scores already entered (null = not entered yet).
+ * Same data scope as recordSubjectScore: the subject's assigned teacher in that class, or ENTER_ANY_SCORES.
+ */
+export async function getSubjectScoreSheet(actor: ScoreActor, classSectionId: string, subjectId: string, assessmentPeriodId: string) {
+  const [classSection, subject, period] = await Promise.all([
+    prisma.classSection.findUnique({
+      where: { id: classSectionId },
+      include: { grade: { include: { gradeSubjects: { where: { subjectId } } } }, academicYear: true },
+    }),
+    prisma.subject.findUnique({ where: { id: subjectId } }),
+    prisma.assessmentPeriod.findUnique({ where: { id: assessmentPeriodId }, include: { academicYear: true } }),
+  ]);
+  if (!classSection) throw Errors.CLASS_SECTION_NOT_FOUND();
+  if (!subject) throw Errors.SUBJECT_NOT_FOUND();
+  if (!period) throw Errors.ASSESSMENT_PERIOD_NOT_FOUND();
+  const className = `${classSection.grade.gradeNumber}${classSection.sectionName}`;
+  const periodName = `${period.name} ${period.academicYear.name}`;
+  if (classSection.academicYearId !== period.academicYearId) {
+    throw Errors.PERIOD_NOT_IN_CLASS_YEAR(periodName, className, classSection.academicYear.name);
+  }
+  if (classSection.grade.gradeSubjects.length === 0) throw Errors.SUBJECT_NOT_IN_GRADE(subject.latinName, classSection.grade.gradeNumber);
+
+  // ── Data scope, checked before any score is read ──────────────────────
+  if (!actor.canEnterAnyScore) {
+    const assignment =
+      actor.staffProfileId &&
+      (await prisma.subjectTeacherAssignment.findUnique({
+        where: { subjectId_classSectionId_academicYearId: { subjectId: subject.id, classSectionId: classSection.id, academicYearId: classSection.academicYearId } },
+        select: { staffProfileId: true },
+      }));
+    if (!assignment || assignment.staffProfileId !== actor.staffProfileId) {
+      throw Errors.NOT_TEACHING_SUBJECT(subject.latinName, className);
+    }
+  }
+
+  const config = await prisma.subjectAssessmentConfig.findUnique({
+    where: { subjectId_assessmentPeriodId: { subjectId: subject.id, assessmentPeriodId: period.id } },
+    include: { components: { orderBy: { name: 'asc' } } },
+  });
+
+  const enrollments = await prisma.yearlyEnrollment.findMany({
+    where: { classSectionId: classSection.id, student: { status: StudentStatus.ENROLLED } },
+    include: { student: { select: { id: true, studentIdentifier: true, khmerName: true, latinName: true, gender: true } } },
+    orderBy: { student: { khmerName: 'asc' } },
+  });
+  const enrollmentIds = enrollments.map((e) => e.id);
+  const [totals, componentScores] = config
+    ? await Promise.all([
+        prisma.monthlySubjectScore.findMany({ where: { subjectAssessmentConfigId: config.id, enrollmentId: { in: enrollmentIds } } }),
+        prisma.componentScore.findMany({
+          where: { enrollmentId: { in: enrollmentIds }, subjectComponentId: { in: config.components.map((c) => c.id) } },
+        }),
+      ])
+    : [[], []];
+  const totalOf = new Map(totals.map((s) => [s.enrollmentId, s.score]));
+
+  // The same conditions recordSubjectScore refuses on, in the same order
+  const deadlinePassed = !!period.scoreEntryDeadline && todayAtSchool() > isoDate(period.scoreEntryDeadline);
+  const lockReason: SheetLockReason | null = period.isLocked
+    ? 'PERIOD_LOCKED'
+    : !actor.canEnterAnyScore && deadlinePassed
+      ? 'DEADLINE_PASSED'
+      : period.academicYear.status === AcademicYearStatus.COMPLETED
+        ? 'YEAR_COMPLETED'
+        : !config
+          ? 'NO_RULES'
+          : null;
+
+  const students = enrollments.map((e, i) => ({
+    no: i + 1,
+    ...e.student,
+    totalScore: totalOf.get(e.id) ?? null,
+    // componentId → score, only in component-based months
+    components: config?.isComponentBased
+      ? Object.fromEntries(componentScores.filter((c) => c.enrollmentId === e.id).map((c) => [c.subjectComponentId, c.score]))
+      : null,
+  }));
+  const entered = students.filter((s) => s.totalScore !== null).length;
+
+  return {
+    classSection: { id: classSection.id, name: className, academicYear: { id: classSection.academicYear.id, name: classSection.academicYear.name } },
+    subject: { id: subject.id, code: subject.code, khmerName: subject.khmerName, latinName: subject.latinName },
+    assessmentPeriod: {
+      id: period.id,
+      name: period.name,
+      isLocked: period.isLocked,
+      scoreEntryDeadline: period.scoreEntryDeadline && isoDate(period.scoreEntryDeadline),
+    },
+    rules: config && {
+      maxTotalScore: config.maxTotalScore,
+      isComponentBased: config.isComponentBased,
+      components: config.components.map((c) => ({ id: c.id, name: c.name, maxScore: c.maxScore })),
+    },
+    canEdit: lockReason === null,
+    lockReason,
+    summary: { students: students.length, entered, missing: students.length - entered },
+    students,
+  };
 }

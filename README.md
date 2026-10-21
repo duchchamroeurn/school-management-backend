@@ -242,7 +242,7 @@ All routes are prefixed with `/api/v1`. Except for `/health` and `/auth/login`, 
 | Teacher | `GET /teacher/my-classes?academicYear=` |
 | Audit log | `GET /audit-logs` |
 | Assessment periods | CRUD on `/assessment-periods`, plus `POST /:id/lock`, `POST /:id/unlock`, `PUT/DELETE /:id/subjects/:subjectId` and `POST /:id/copy-rules` |
-| Scores | `POST /scores/subject`, `POST /scores/results/calculate`, `PATCH /scores/results/remarks` |
+| Scores | `GET /scores/subject-sheet`, `POST /scores/subject`, `POST /scores/results/calculate`, `PATCH /scores/results/remarks` |
 | Reports | `GET /reports/class-list/:classSectionId`, `GET /reports/gender-statistics`, `GET /reports/report-cards/:classSectionId` |
 | Users | `GET /users`, `GET /users/:id`, `POST /users`, `PUT /users/:id/roles`, `PATCH /users/:id/status`, `POST /users/:id/reset-password`, `DELETE /users/:id` |
 | Roles | `GET /roles`, `GET /roles/:id` |
@@ -399,6 +399,13 @@ A period can only be deleted before any score or result exists.
 ### Entering scores
 
 `POST /scores/subject` records one student's score for one subject in one assessment period. Sending it again corrects the score. It returns `201` the first time and `200` after that.
+
+**Reading a score sheet:** `GET /scores/subject-sheet?classSectionId=&subjectId=&assessmentPeriodId=` returns what a score-entry screen needs for one subject in one class and period:
+- the period's rules for the subject (`rules`, or `null` if the subject has none that period);
+- every active student, sorted by Khmer name, with their `totalScore` and, in component-based months, their `components` as `componentId → score` (`null` = not entered yet);
+- `canEdit` and `lockReason`: `PERIOD_LOCKED`, `DEADLINE_PASSED` (not for `ENTER_ANY_SCORES`), `YEAR_COMPLETED` or `NO_RULES`. These are the same conditions `POST /scores/subject` refuses on.
+
+It has the same scope as entering scores: the subject's assigned teacher in that class (`403 NOT_TEACHING_SUBJECT` otherwise), or anyone with `ENTER_ANY_SCORES`.
 
 **Who can enter scores:** a teacher can teach several subjects in several classes. Each assignment links a teacher, a subject and a class, and each subject in a class has one teacher.
 - **Teachers** (`ENTER_SCORES`) can only score the subjects they're assigned to, in the classes they're assigned to. For anything else they get `403 NOT_TEACHING_SUBJECT`.

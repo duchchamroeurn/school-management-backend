@@ -100,3 +100,53 @@ describe('deadline and lock', () => {
     expect((await score(teacher.token, { studentId: studentA.id, subjectId: math.id, totalScoreAchieved: 44 })).status).toBe(200);
   });
 });
+
+describe('reading a score sheet', () => {
+  const sheet = (token: string, subjectId: string, classSectionId = classA.id) =>
+    api.get('/api/v1/scores/subject-sheet').set(bearer(token)).query({ classSectionId, subjectId, assessmentPeriodId: period.id });
+
+  it('shows the assigned teacher the scores already entered in their subject and class', async () => {
+    await score(teacher.token, { studentId: studentA.id, subjectId: math.id, totalScoreAchieved: 38 });
+    const res = await sheet(teacher.token, math.id);
+    expect(res.status).toBe(200);
+    expect(res.body.data.rules).toMatchObject({ maxTotalScore: 50, isComponentBased: false });
+    expect(res.body.data.canEdit).toBe(true);
+    expect(res.body.data.lockReason).toBeNull();
+    const row = res.body.data.students.find((s: { id: string }) => s.id === studentA.id);
+    expect(row.totalScore).toBe(38);
+    expect(row.components).toBeNull();
+    expect(res.body.data.summary).toMatchObject({ students: 1, entered: 1, missing: 0 });
+  });
+
+  it('gives component scores by component id in component-based months', async () => {
+    const config = await prisma.subjectAssessmentConfig.findFirstOrThrow({ where: { assessmentPeriodId: period.id, subjectId: khmer.id }, include: { components: true } });
+    const id = (name: string) => config.components.find((c) => c.name === name)!.id;
+    await score(principal.token, { studentId: studentA.id, subjectId: khmer.id, components: [{ componentId: id('Exam'), score: 25 }, { componentId: id('Homework'), score: 15 }] });
+
+    const res = await sheet(principal.token, khmer.id);
+    expect(res.status).toBe(200);
+    expect(res.body.data.rules.components.map((c: { name: string }) => c.name)).toEqual(['Exam', 'Homework']);
+    const row = res.body.data.students.find((s: { id: string }) => s.id === studentA.id);
+    expect(row.totalScore).toBe(40);
+    expect(row.components).toEqual({ [id('Exam')]: 25, [id('Homework')]: 15 });
+  });
+
+  it("refuses a subject the teacher doesn't teach in that class, before revealing any score", async () => {
+    const res = await sheet(teacher.token, khmer.id);
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('NOT_TEACHING_SUBJECT');
+    expect(res.body.data).toBeUndefined();
+  });
+
+  it('reports a locked period as not editable', async () => {
+    const locked = await makePeriod(principal.token, [{ subjectId: math.id, maxTotalScore: 50 }]);
+    await api.post(`/api/v1/assessment-periods/${locked.id}/lock`).set(bearer(principal.token)).expect(200);
+    const res = await api
+      .get('/api/v1/scores/subject-sheet')
+      .set(bearer(teacher.token))
+      .query({ classSectionId: classA.id, subjectId: math.id, assessmentPeriodId: locked.id });
+    expect(res.status).toBe(200);
+    expect(res.body.data.canEdit).toBe(false);
+    expect(res.body.data.lockReason).toBe('PERIOD_LOCKED');
+  });
+});

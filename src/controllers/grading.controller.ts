@@ -3,7 +3,7 @@ import { Errors } from '../constants/errors';
 import { PERMISSIONS } from '../constants/permissions';
 import * as gradingService from '../services/grading.service';
 import * as resultsService from '../services/results.service';
-import { bodyOf, optionalScore, optionalString, required } from '../utils/validate';
+import { bodyOf, optionalScore, optionalString, queryString, required } from '../utils/validate';
 
 const MAX_COMPONENTS = 50;
 
@@ -41,6 +41,20 @@ export async function recordSubjectScore(req: Request, res: Response) {
     components: parseComponents(body.components),
   });
   res.status(created ? 201 : 200).json({ status: 'success', data: result });
+}
+
+// GET /api/v1/scores/subject-sheet?classSectionId=&subjectId=&assessmentPeriodId=
+// The scores already entered for one subject in one class and period, with the period's rules for it and
+// whether the sheet can still be edited (lockReason). Same scope as recording a score.
+export async function subjectSheet(req: Request, res: Response) {
+  const actor = { staffProfileId: req.user!.staffProfileId, canEnterAnyScore: req.user!.permissions.includes(PERMISSIONS.SCORE.ENTER_ANY) };
+  const sheet = await gradingService.getSubjectScoreSheet(
+    actor,
+    required(queryString(req.query.classSectionId, 'classSectionId'), 'classSectionId'),
+    required(queryString(req.query.subjectId, 'subjectId'), 'subjectId'),
+    required(queryString(req.query.assessmentPeriodId, 'assessmentPeriodId'), 'assessmentPeriodId'),
+  );
+  res.json({ status: 'success', data: sheet });
 }
 
 // POST /api/v1/scores/results/calculate — { classSectionId, assessmentPeriodId }
