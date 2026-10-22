@@ -5,9 +5,10 @@
 // Everything is for the ACTIVE academic year (or the one asked for). Sections return numbers and ids, never
 // labels: the frontend renders them in Khmer or English.
 import { PERMISSIONS } from '../constants/permissions';
-import { AcademicYearStatus, AttendanceStatus, Gender, LeaveRequestStatus, StudentStatus } from '../generated/prisma/client';
+import { AcademicYearStatus, AttendanceStatus, Gender, LeaveRequestStatus, Shift, StudentStatus } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
 import { todayAtSchool } from '../utils/dates';
+import { schoolDayStatus } from './calendar.service';
 
 export interface DashboardViewer {
   userId: string;
@@ -25,6 +26,9 @@ const pct = (part: number, whole: number) => (whole ? Math.round((part / whole) 
 const className = (c: { sectionName: string; grade: { gradeNumber: number } }) => `${c.grade.gradeNumber}${c.sectionName}`;
 const dateOnly = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 const daysBefore = (iso: string, days: number) => new Date(dateOnly(iso).getTime() - days * 86_400_000);
+
+type ClosedBy = Awaited<ReturnType<typeof schoolDayStatus>>['closedBy'];
+const closedByDto = (event: ClosedBy) => event && { id: event.id, type: event.type, khmerName: event.khmerName, latinName: event.latinName };
 
 // Students frequently absent: this many unexcused daily absences in the last 30 days
 const FREQUENT_ABSENCE_THRESHOLD = 3;
@@ -94,10 +98,19 @@ async function capacitySection(yearId: string) {
   };
 }
 
-/** Daily (gate) attendance today across the school; the denominator is the students actually marked */
+/**
+ * Daily (gate) attendance today across the school; the denominator is the students actually marked. Only classes
+ * whose shift has school today count (school calendar): on a holiday, or a Saturday afternoon, none are expected.
+ */
 async function attendanceTodaySection(yearId: string) {
   const today = todayAtSchool();
-  const classes = await prisma.classSection.findMany({ where: { academicYearId: yearId }, include: { grade: true } });
+  const [morning, afternoon, allClasses] = await Promise.all([
+    schoolDayStatus(prisma, dateOnly(today), Shift.MORNING),
+    schoolDayStatus(prisma, dateOnly(today), Shift.AFTERNOON),
+    prisma.classSection.findMany({ where: { academicYearId: yearId }, include: { grade: true } }),
+  ]);
+  const open = { [Shift.MORNING]: morning.open, [Shift.AFTERNOON]: afternoon.open };
+  const classes = allClasses.filter((c) => open[c.shift]);
   const groups = await prisma.attendanceRecord.groupBy({
     by: ['classSectionId', 'status'],
     where: { date: dateOnly(today), subjectId: null, classSectionId: { in: classes.map((c) => c.id) } },
@@ -109,6 +122,8 @@ async function attendanceTodaySection(yearId: string) {
   const studentsMarked = Object.values(byStatus).reduce((a, b) => a + b, 0);
   return {
     date: today,
+    // closedBy: the holiday, break or event that closed the school today (null on a day the school week has off)
+    schoolDay: { morning: morning.open, afternoon: afternoon.open, closedBy: closedByDto(morning.closedBy ?? afternoon.closedBy) },
     classes: classes.length,
     classesMarked: marked.size,
     classesNotMarked: classes.filter((c) => !marked.has(c.id)).map((c) => ({ classSectionId: c.id, name: className(c) })),
@@ -266,7 +281,7 @@ async function myHomeroomSection(staffProfileId: string, yearId: string) {
   const today = todayAtSchool();
   const studentIds = classSection.enrollments.map((e) => e.studentId);
 
-  const [todayGroups, absences, pendingLeave, periods] = await Promise.all([
+  const [todayGroups, absences, pendingLeave, periods, schoolDay] = await Promise.all([
     prisma.attendanceRecord.groupBy({ by: ['status'], where: { classSectionId: classSection.id, subjectId: null, date: dateOnly(today) }, _count: true }),
     prisma.attendanceRecord.groupBy({
       by: ['studentId'],
@@ -279,6 +294,7 @@ async function myHomeroomSection(staffProfileId: string, yearId: string) {
       select: { id: true, name: true, isLocked: true, _count: { select: { results: { where: { enrollment: { classSectionId: classSection.id } } } } } },
       orderBy: { startDate: 'asc' },
     }),
+    schoolDayStatus(prisma, dateOnly(today), classSection.shift),
   ]);
 
   const students = count();
@@ -289,7 +305,13 @@ async function myHomeroomSection(staffProfileId: string, yearId: string) {
     classSectionId: classSection.id,
     name: className(classSection),
     students,
-    attendanceToday: { date: today, marked: todayGroups.length > 0, ...attendanceToday },
+    attendanceToday: {
+      date: today,
+      marked: todayGroups.length > 0,
+      // No school for the class today: nothing to mark
+      schoolDay: { open: schoolDay.open, closedBy: closedByDto(schoolDay.closedBy) },
+      ...attendanceToday,
+    },
     frequentAbsentees: absences
       .filter((a) => a._count >= FREQUENT_ABSENCE_THRESHOLD && byId.has(a.studentId))
       .map((a) => ({ studentId: a.studentId, ...byId.get(a.studentId)!, unexcusedAbsences30d: a._count }))

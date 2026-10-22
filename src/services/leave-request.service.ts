@@ -5,6 +5,7 @@ import { Errors } from '../constants/errors';
 import { AcademicYearStatus, AttendanceStatus, LeaveRequestStatus, Prisma, StudentStatus } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
 import { audit } from './audit.service';
+import { schoolDayCounter } from './calendar.service';
 
 export const MAX_LEAVE_DAYS = 90;
 
@@ -28,19 +29,51 @@ const isoDate = (date: Date) => date.toISOString().slice(0, 10);
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const details = {
-  student: { select: { id: true, studentIdentifier: true, khmerName: true, latinName: true } },
+  student: {
+    select: {
+      id: true,
+      studentIdentifier: true,
+      khmerName: true,
+      latinName: true,
+      // Only to find the class shift for counting school days; not sent to clients
+      enrollments: { select: { classSection: { select: { shift: true } }, academicYear: { select: { startDate: true, endDate: true } } } },
+    },
+  },
   _count: { select: { excusedAttendance: true } },
 } satisfies Prisma.LeaveRequestInclude;
 
 type LeaveWithDetails = Prisma.LeaveRequestGetPayload<{ include: typeof details }>;
 
-const toDto = ({ _count, ...leave }: LeaveWithDetails) => ({
-  ...leave,
-  startDate: isoDate(leave.startDate),
-  endDate: isoDate(leave.endDate),
-  days: Math.round((leave.endDate.getTime() - leave.startDate.getTime()) / DAY_MS) + 1,
-  excusedAbsences: _count.excusedAttendance,
-});
+/** The shift of the student's class in the academic year the leave starts in; null when not in a class then. */
+const shiftOf = (leave: LeaveWithDetails) =>
+  leave.student.enrollments.find((e) => e.academicYear.startDate <= leave.startDate && e.academicYear.endDate >= leave.startDate)
+    ?.classSection.shift ?? null;
+
+/**
+ * Leave requests as sent to clients. `days` counts every calendar day; `schoolDays` only the days the student's
+ * class has lessons (school calendar: no weekends off, holidays or breaks).
+ */
+async function toDtos(db: Prisma.TransactionClient, leaves: LeaveWithDetails[]) {
+  if (!leaves.length) return [];
+  const from = new Date(Math.min(...leaves.map((l) => l.startDate.getTime())));
+  const to = new Date(Math.max(...leaves.map((l) => l.endDate.getTime())));
+  const countSchoolDays = await schoolDayCounter(db, from, to);
+  return leaves.map((full) => {
+    const schoolDays = countSchoolDays(full.startDate, full.endDate, shiftOf(full));
+    const { _count, student: { enrollments: _enrollments, ...student }, ...leave } = full;
+    return {
+      ...leave,
+      student,
+      startDate: isoDate(leave.startDate),
+      endDate: isoDate(leave.endDate),
+      days: Math.round((leave.endDate.getTime() - leave.startDate.getTime()) / DAY_MS) + 1,
+      schoolDays,
+      excusedAbsences: _count.excusedAttendance,
+    };
+  });
+}
+
+const toDto = async (db: Prisma.TransactionClient, leave: LeaveWithDetails) => (await toDtos(db, [leave]))[0]!;
 
 const label = (leave: LeaveWithDetails) =>
   `${leave.student.studentIdentifier} ${leave.student.latinName} — ${isoDate(leave.startDate)} – ${isoDate(leave.endDate)}`;
@@ -68,13 +101,13 @@ export async function listLeaveRequests(filter: ListLeaveRequestsFilter) {
     prisma.leaveRequest.findMany({ where, include: details, orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }], skip: filter.skip, take: filter.take }),
     prisma.leaveRequest.count({ where }),
   ]);
-  return { items: items.map(toDto), total };
+  return { items: await toDtos(prisma, items), total };
 }
 
 export async function getLeaveRequest(id: string) {
   const leave = await prisma.leaveRequest.findUnique({ where: { id }, include: details });
   if (!leave) throw Errors.LEAVE_REQUEST_NOT_FOUND();
-  return toDto(leave);
+  return toDto(prisma, leave);
 }
 
 /** Records a leave request as PENDING. A student can't have two pending/approved requests that overlap. */
@@ -113,7 +146,7 @@ export async function createLeaveRequest(input: CreateLeaveRequestInput) {
       entityLabel: label(leave),
       after: { status: leave.status, startDate: isoDate(leave.startDate), endDate: isoDate(leave.endDate), reason: leave.reason },
     });
-    return toDto(leave);
+    return toDto(tx, leave);
   });
 }
 
@@ -142,7 +175,7 @@ export async function approveLeaveRequest(id: string) {
       before: { status: leave.status },
       after: { status: LeaveRequestStatus.APPROVED, excusedAbsences: excused.count },
     });
-    return { leaveRequest: toDto(await tx.leaveRequest.findUniqueOrThrow({ where: { id }, include: details })), excusedAbsences: excused.count };
+    return { leaveRequest: await toDto(tx, await tx.leaveRequest.findUniqueOrThrow({ where: { id }, include: details })), excusedAbsences: excused.count };
   });
 }
 
@@ -160,7 +193,7 @@ export async function rejectLeaveRequest(id: string) {
       before: { status: leave.status },
       after: { status: LeaveRequestStatus.REJECTED },
     });
-    return { leaveRequest: toDto(await tx.leaveRequest.findUniqueOrThrow({ where: { id }, include: details })) };
+    return { leaveRequest: await toDto(tx, await tx.leaveRequest.findUniqueOrThrow({ where: { id }, include: details })) };
   });
 }
 
@@ -212,7 +245,7 @@ export async function cancelLeaveRequest(id: string) {
       after: { status: LeaveRequestStatus.CANCELLED, ...(leave.status === LeaveRequestStatus.APPROVED && { revertedAbsences: reverted, stillExcusedByOtherLeave: stillExcused }) },
     });
     return {
-      leaveRequest: toDto(await tx.leaveRequest.findUniqueOrThrow({ where: { id }, include: details })),
+      leaveRequest: await toDto(tx, await tx.leaveRequest.findUniqueOrThrow({ where: { id }, include: details })),
       revertedAbsences: reverted,
       stillExcusedByOtherLeave: stillExcused,
     };

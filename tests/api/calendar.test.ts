@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { api, bearer, makeClass, prisma, staffUser } from '../helpers';
+import { todayAtSchool } from '../../src/utils/dates';
+import { api, bearer, makeClass, makeStudentsIn, prisma, staffUser } from '../helpers';
 
 // The calendar is school-wide, so each test uses dates no other test file touches (2031, 2038–2040, March 2027).
 let principal: Awaited<ReturnType<typeof staffUser>>;
@@ -175,5 +176,37 @@ describe('attendance follows the calendar', () => {
 
     expect((await sheet('2027-03-14')).body.data.schoolDay).toEqual({ open: false, closedBy: null }); // a Sunday
     expect((await sheet('2027-03-11')).body.data.schoolDay).toEqual({ open: true, closedBy: null });
+  });
+
+  it('counts a leave request’s school days for the student’s shift', async () => {
+    const classSection = await prisma.classSection.findUniqueOrThrow({ where: { id: classId } });
+    const [student] = await makeStudentsIn(classSection, 1);
+    // Monday 8 – Sunday 14 March 2027: the 10th is a holiday and the 14th a Sunday; Saturday morning is taught
+    const res = await api
+      .post('/api/v1/leave-requests')
+      .set(bearer(principal.token))
+      .send({ studentId: student!.id, startDate: '2027-03-08', endDate: '2027-03-14' });
+    expect(res.status).toBe(201);
+    expect(res.body.data).toMatchObject({ days: 7, schoolDays: 5 });
+    expect(res.body.data.student).not.toHaveProperty('enrollments');
+  });
+});
+
+describe('the dashboard follows the calendar', () => {
+  it('expects no class to take attendance on a holiday today, and names it', async () => {
+    const today = todayAtSchool();
+    const holiday = (await createEvent({ type: 'PUBLIC_HOLIDAY', khmerName: 'ថ្ងៃឈប់ថ្ងៃនេះ', startDate: today, endDate: today })).body.data;
+    try {
+      const res = await api.get('/api/v1/dashboard').set(bearer(principal.token));
+      expect(res.status).toBe(200);
+      expect(res.body.data.sections.attendanceToday).toMatchObject({
+        schoolDay: { morning: false, afternoon: false, closedBy: { id: holiday.id, type: 'PUBLIC_HOLIDAY' } },
+        classes: 0,
+        classesNotMarked: [],
+      });
+    } finally {
+      // Other test files read today's dashboard too
+      await api.delete(`/api/v1/school-calendar/events/${holiday.id}`).set(bearer(principal.token));
+    }
   });
 });

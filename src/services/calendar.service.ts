@@ -242,6 +242,25 @@ export async function getCalendar(from: Date, to: Date) {
 }
 
 /**
+ * Counts school days in date ranges within from–to, loading the school week and calendar entries once, so a
+ * page of leave requests costs two queries. With a shift, a day counts when that shift is taught; without
+ * one (e.g. a student not in any class), when either shift is.
+ */
+export async function schoolDayCounter(db: Prisma.TransactionClient, from: Date, to: Date) {
+  const [weekRows, occurrences] = await Promise.all([getSchoolWeek(db), occurrencesBetween(db, from, to)]);
+  const week = new Map(weekRows.map((d) => [d.dayOfWeek, d]));
+  const taught = (date: Date, shift: Shift) => shiftStatus(week, occurrences, date, shift).open;
+
+  return (start: Date, end: Date, shift: Shift | null) => {
+    let count = 0;
+    for (let date = start; date <= end; date = addDays(date, 1)) {
+      if (shift ? taught(date, shift) : taught(date, Shift.MORNING) || taught(date, Shift.AFTERNOON)) count += 1;
+    }
+    return count;
+  };
+}
+
+/**
  * Whether the shift is taught on the date. When not, `reason` names the entry that closed it, or says the
  * school week has no classes then. Used to refuse attendance on days without school.
  */

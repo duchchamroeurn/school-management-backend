@@ -395,6 +395,10 @@ Anyone signed in can read the calendar. Changing it needs `MANAGE_SCHOOL_CALENDA
 
 **Attendance** can't be recorded when the class's shift has no school that day (`400 SCHOOL_CLOSED`). The attendance sheet (`GET /attendance/class-sections/:id`) says so in `schoolDay: { open, closedBy }`.
 
+**Elsewhere the calendar is used for:**
+- **Leave requests:** each one has `schoolDays` next to `days`, counting only the days the student's class has lessons.
+- **Dashboard:** `attendanceToday` has `schoolDay: { morning, afternoon, closedBy }` and only counts classes whose shift has school today. `myHomeroom.attendanceToday.schoolDay` gives the same for the teacher's class.
+
 ### Setting up grading
 
 Scores are entered per assessment period: a month such as "January", or an exam period such as "Semester 1". Each period says how every subject is scored in it. Setting up periods and rules needs `MANAGE_ASSESSMENT_RULES`, which Principal and System Admin hold, or a custom Academic Coordinator role.
