@@ -29,9 +29,16 @@ export function optionalText(value: unknown, field: string, maxLength: number): 
 }
 
 // undefined = not provided, null (or "") = clear the value
-export function nullableString(value: unknown, field: string): string | null | undefined {
+export function nullableString(value: unknown, field: string, maxLength?: number): string | null | undefined {
   if (value === null || value === '') return null;
-  return optionalString(value, field);
+  return optionalString(value, field, maxLength);
+}
+
+// Gazetteer village code: 8 digits (province 2 + district 2 + commune 2 + village 2), e.g. "12010203"
+export function optionalVillageCode(value: unknown, field: string): string | undefined {
+  const code = optionalString(value, field, 8);
+  if (code !== undefined && !/^\d{8}$/.test(code)) throw invalid(field, 'must be an 8-digit village code from the gazetteer');
+  return code;
 }
 
 export function optionalInt(value: unknown, field: string, min: number, max: number): number | undefined {
@@ -150,6 +157,13 @@ export function optionalBoolean(value: unknown, field: string): boolean | undefi
   if (value === undefined) return undefined;
   if (typeof value !== 'boolean') throw invalid(field, 'must be true or false');
   return value;
+}
+
+// A boolean sent as JSON true/false, or as the text "true"/"false" (multipart/form-data fields are always text)
+export function optionalFlag(value: unknown, field: string): boolean | undefined {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return optionalBoolean(value, field);
 }
 
 // "true" / "false" in a query string

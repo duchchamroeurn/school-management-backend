@@ -15,7 +15,17 @@ export const AUDIT_ACTIONS = {
   Role: ['ROLE_CREATED', 'ROLE_UPDATED', 'ROLE_PERMISSIONS_CHANGED', 'ROLE_DELETED'],
   Enrollment: ['ENROLLMENT_CREATED', 'ENROLLMENT_TRANSFERRED', 'ENROLLMENT_DELETED'],
   // GUARDIAN_*: a guardian linked to / unlinked from the student, or the link changed (relationship, primary contact)
-  Student: ['STUDENT_CREATED', 'STUDENT_UPDATED', 'STUDENT_DELETED', 'GUARDIAN_LINKED', 'GUARDIAN_LINK_UPDATED', 'GUARDIAN_UNLINKED'],
+  // *_REPLACED: before/after hold the stored file's id, size and checksum
+  Student: [
+    'STUDENT_CREATED',
+    'STUDENT_UPDATED',
+    'STUDENT_DELETED',
+    'STUDENT_PHOTO_REPLACED',
+    'STUDENT_BIRTH_CERTIFICATE_REPLACED',
+    'GUARDIAN_LINKED',
+    'GUARDIAN_LINK_UPDATED',
+    'GUARDIAN_UNLINKED',
+  ],
   Guardian: ['GUARDIAN_CREATED', 'GUARDIAN_UPDATED', 'GUARDIAN_DELETED'],
   Staff: ['STAFF_CREATED', 'STAFF_UPDATED', 'STAFF_DELETED'],
   // CLASS_PROMOTED: end-of-year promotion of the class (after = counts and targets; each enrollment is audited too)

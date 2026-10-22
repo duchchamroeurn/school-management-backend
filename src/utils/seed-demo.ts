@@ -35,6 +35,11 @@ const LAST_YEAR = '2025-2026';
 const CURRENT_YEAR = '2026-2027';
 const NEXT_YEAR = { name: '2027-2028', startDate: new Date('2027-11-01'), endDate: new Date('2028-08-31') };
 const DEMO_YEARS = [LAST_YEAR, CURRENT_YEAR, NEXT_YEAR.name];
+// Created by the demo when missing (e.g. after a database reset)
+const PREVIOUS_YEARS = [
+  { name: LAST_YEAR, startDate: new Date('2025-11-01'), endDate: new Date('2026-08-31'), status: AcademicYearStatus.ACTIVE },
+  { name: CURRENT_YEAR, startDate: new Date('2026-11-01'), endDate: new Date('2027-08-31'), status: AcademicYearStatus.UPCOMING },
+];
 const DEMO_USERNAME_PREFIX = 'demo.';
 
 const log = (msg: string) => console.log(`  ${msg}`);
@@ -96,6 +101,13 @@ async function seedDemo() {
   ).map((c, i) => ({ ...c, students: pool.splice(0, FILL_PATTERN[i] ?? 0) }));
 
   // ── 1. Last year: one history class per grade, enroll everyone who continues, then complete it
+  // A fresh database has no years yet: create them as the reset leaves them (last year ACTIVE, this year UPCOMING)
+  for (const year of PREVIOUS_YEARS) {
+    if (!(await prisma.academicYear.findUnique({ where: { name: year.name } }))) {
+      await createAcademicYear(year);
+      log(`✓ academic year ${year.name} created (${year.status})`);
+    }
+  }
   const lastYear = await prisma.academicYear.findUnique({ where: { name: LAST_YEAR } });
   if (!lastYear) throw new Error(`Academic year ${LAST_YEAR} not found`);
   if (lastYear.status === AcademicYearStatus.COMPLETED) await updateAcademicYear(lastYear.id, { status: AcademicYearStatus.ACTIVE });

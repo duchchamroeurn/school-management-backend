@@ -187,6 +187,40 @@ const ERROR_DEFS = {
   ),
   STUDENT_HAS_LOGIN: def(409, (studentIdentifier: string) => `Student ${studentIdentifier} has a login account; remove it first`),
 
+  // ── Uploaded files (photo, birth certificate scan) ──────
+  FILE_REQUIRED: def(400, (field: string) => `${field} is required: attach the file (multipart/form-data)`, {
+    code: 'VALIDATION_ERROR',
+    details: (field: string) => ({ field }),
+  }),
+  FILE_TYPE_NOT_ALLOWED: def(400, (field: string, allowed: string[]) => `${field} must be a ${allowed.join(', ')} file`, {
+    details: (field: string, allowed: string[]) => ({ field, allowed }),
+  }),
+  FILE_TOO_LARGE: def(413, (field: string, maxMb: number) => `${field} must be at most ${maxMb} MB`, {
+    details: (field: string, maxMb: number) => ({ field, maxBytes: maxMb * 1024 * 1024 }),
+  }),
+  UNEXPECTED_FILE: def(400, (field: string, allowed: string[]) => `Unexpected file field "${field}"; send ${allowed.join(' and ') || 'no files'}`, {
+    details: (field: string, allowed: string[]) => ({ field, allowed }),
+  }),
+  PHOTO_TOO_SMALL: def(
+    400,
+    (field: string, width: number, height: number, minPx: number) => `${field} is ${width}×${height} px; a 4x4 photo must be at least ${minPx}×${minPx} px`,
+    { details: (field: string) => ({ field }) },
+  ),
+  PHOTO_NOT_SQUARE: def(
+    400,
+    (field: string, width: number, height: number) => `${field} is ${width}×${height} px; a 4x4 photo must be (roughly) square — crop it first`,
+    { details: (field: string) => ({ field }) },
+  ),
+  FILE_NOT_FOUND: def(404, 'File not found'),
+  STORAGE_UNAVAILABLE: def(503, 'File storage is not reachable; please try again later', { code: 'SERVICE_UNAVAILABLE' }),
+
+  // ── Gazetteer (provinces, districts, communes, villages) ──
+  LOCATION_NOT_FOUND: def(404, (level: string, code: string) => `No ${level} with code ${code}`, { code: 'NOT_FOUND' }),
+  VILLAGE_NOT_FOUND: def(400, (field: string, code: string) => `${field}: no village with code ${code} in the gazetteer`, {
+    code: 'VALIDATION_ERROR',
+    details: (field: string) => ({ field }),
+  }),
+
   // ── Guardians ───────────────────────────────────────────
   GUARDIAN_NOT_FOUND: def(404, 'Guardian not found'),
   GUARDIAN_INPUT_REQUIRED: def(400, 'Send guardianId to link an existing guardian, or guardian { khmerName, latinName, … } to add a new one', {

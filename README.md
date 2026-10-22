@@ -12,6 +12,7 @@ Built with **Node.js**, **Express 5**, **TypeScript**, **Prisma 7**, and **Postg
 - **Bilingual names**: records carry both a `khmerName` and a `latinName`.
 - **Academic structure**: academic years, grades, subjects mapped to grades, class sections with homeroom teachers, and yearly enrollments.
 - **Data import**: bulk import of students and staff from JSON files, validated with the same rules as the API.
+- **Student registry (សៀវភៅបញ្ជីឈ្មោះសិស្ស)**: each student has a 4x4 photo, a birth certificate scan, the parents, and the place of birth and address as villages of the official gazetteer (ភូមិ › ឃុំ/សង្កាត់ › ស្រុក/ក្រុង/ខណ្ឌ › ខេត្ត/រាជធានី).
 
 ## Project structure
 
@@ -120,16 +121,20 @@ Failed logins are throttled. After `LOGIN_MAX_FAILURES` wrong passwords in a row
 ## Running with Docker
 
 ```sh
-cp .env.example .env     # then set JWT_SECRET and CORS_ORIGINS
+cp .env.example .env     # then set JWT_SECRET, CORS_ORIGINS and S3_SECRET_KEY
 docker compose up --build
 ```
 
-This starts four services:
+This starts six services:
 
 - **db**: PostgreSQL 17 on port `5432`, stored in the `pgdata` volume
 - **migrate**: a one-off job that pushes the schema and seeds default data, then exits
 - **api**: the API on port `3000` (override with `API_PORT`), started once `migrate` succeeds
+- **minio**: object storage for uploaded files (student photos, birth certificate scans), stored in the `miniodata` volume. Its S3 API (`9000`) and web console (`9001`) are published on `127.0.0.1` only. The login is `S3_ACCESS_KEY` / `S3_SECRET_KEY`.
 - **backup**: nightly database backups (see [Backups](#backups))
+- **files-backup**: nightly copy of the uploaded files (see [Backups](#backups))
+
+MinIO Inc. stopped publishing Docker images in 2025. Compose uses a maintained community build of the same server (`pgsty/minio`). To use another image, set `MINIO_IMAGE`.
 
 The containers read all settings from `.env`. Compose builds `DATABASE_URL` from `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB`, so the `DATABASE_URL` in `.env` is only used outside Docker.
 
@@ -164,6 +169,27 @@ docker compose start api
 ```
 
 If you changed `POSTGRES_USER` or `POSTGRES_DB`, use those values for `-U` and `-d`.
+
+#### Uploaded files
+
+The `files-backup` service copies the MinIO bucket to `BACKUP_DIR/files/<bucket>` when it starts and every night at `BACKUP_TIME`. The copies are plain files, one per upload.
+
+- **Nothing is ever overwritten:** each upload gets a new name, so a stored file never changes.
+- **Deletions are kept:** files deleted from the bucket stay in the copy. Every file that an older database dump refers to is therefore still there when you restore that dump.
+
+Check the service, or copy now:
+
+```sh
+docker compose ps files-backup                               # "healthy" means a good copy in the last 25 hours
+docker compose exec files-backup /bin/sh /files-backup.sh once
+```
+
+Restore the files, after restoring the database:
+
+```sh
+docker compose run --rm --entrypoint sh files-backup -c \
+  'mc alias set school "$S3_ENDPOINT" "$S3_ACCESS_KEY" "$S3_SECRET_KEY" && mc mirror /backups/files/$S3_BUCKET school/$S3_BUCKET'
+```
 
 ## Testing
 
@@ -200,7 +226,7 @@ Each test builds its own uniquely named data with the helpers in [`tests/helpers
 | Script | Description |
 | --- | --- |
 | `npm run dev` | Start the API with watch mode (`tsx`) |
-| `npm test` | Run the test suite (needs PostgreSQL running) |
+| `npm test` | Run the test suite (needs PostgreSQL and MinIO running: `docker compose up -d db minio`) |
 | `npm run typecheck` | Type-check the code and the tests |
 | `npm run build` | Compile TypeScript to `dist/` |
 | `npm start` | Run the compiled API |
@@ -208,10 +234,23 @@ Each test builds its own uniquely named data with the helpers in [`tests/helpers
 | `npm run db:studio` | Open Prisma Studio |
 | `npm run jwt:secret` | Write a random `JWT_SECRET` into `.env` |
 | `npm run db:seed` | Seed reference data and the root admin |
+| `npm run gazetteer:download` | Download the official gazetteer to `data/gazetteer.json` |
+| `npm run db:seed:gazetteer` | Import or update the gazetteer from `data/gazetteer.json` |
 | `npm run db:seed:students` | Import students from `data/students.json` |
 | `npm run db:seed:staff` | Import staff from `data/staff.json` |
 | `npm run db:seed:demo` | Build a demo school on top of the imported data |
 | `npm run db:reset:demo` | Remove the demo data and rebuild it |
+
+### Gazetteer (provinces, districts, communes, villages)
+
+Student addresses point to villages of the official NCDD gazetteer: 25 provinces, about 210 districts, 1,652 communes and 14,500 villages. Install it once, and re-run both commands when the official gazetteer changes:
+
+```sh
+npm run gazetteer:download     # from the open Pumi dataset (MIT licence), writes data/gazetteer.json
+npm run db:seed:gazetteer      # adds new places and renames changed ones; --dry-run to preview
+```
+
+The server itself never calls the internet. Places that are no longer in the file are kept, because students may still live there, and the import lists them.
 
 ### Importing students and staff
 
@@ -222,6 +261,21 @@ npm run db:seed:students -- --dry-run            # Validate only
 npm run db:seed:students                         # Validate and import
 npm run db:seed:staff -- path/to/staff.json      # Import from a custom file
 ```
+
+A student entry also needs `birthPlaceVillageCode` and `addressVillageCode`, which are 8-digit gazetteer codes. It also needs the paths of its `photo` and `birthCertificateScan` files, relative to the JSON file:
+
+```json
+{
+  "birthCertificateNo": "1001/2013", "khmerName": "សុខ ចាន់ថា", "latinName": "Sok Chantha",
+  "dateOfBirth": "2013-04-14", "gender": "F", "primarySchoolOrigin": "Wat Phnom Primary School",
+  "fatherName": "សុខ ចាន់", "fatherOccupation": "កសិករ", "isFatherDeceased": false,
+  "motherName": "ម៉ៅ ស្រីនី", "motherOccupation": "លក់ដូរ", "isMotherDeceased": false,
+  "birthPlaceVillageCode": "01020101", "addressVillageCode": "12010101", "addressHouseNo": "12B", "addressStreet": "271",
+  "photo": "photos/1001-2013.jpg", "birthCertificateScan": "birth-certificates/1001-2013.pdf"
+}
+```
+
+The demo installer passes `--demo-placeholders`. With it, entries without documents get generated placeholder documents, and entries without village codes get random gazetteer villages. This option is refused when `NODE_ENV=production`.
 
 Every entry is validated first. If any entry is invalid, nothing is imported. Entries that are already registered (matched by birth certificate number for students, national ID for staff) are skipped, so imports are safe to re-run.
 
@@ -298,6 +352,33 @@ What each role sees by default:
 - **Teacher:** `myHomeroom` and `myScoreEntry`.
 - **Student:** `myStudent`.
 - **System Admin:** everything.
+
+### Student registration
+
+`POST /students` takes `multipart/form-data`: the student's details as text fields, plus two files.
+
+- **`photo`:** a JPEG or PNG of at most 5 MB, roughly square (4x4), and at least 300 px. It is cropped and stored as a 472×472 px JPEG, which is 4 cm at 300 dpi. Metadata such as GPS is removed.
+- **`birthCertificateScan`:** a JPEG, PNG or PDF of at most 10 MB.
+
+These fields are required: `birthCertificateNo`, `khmerName`, `latinName`, `dateOfBirth`, `gender`, `birthPlaceVillageCode` and `addressVillageCode`.
+
+These fields are optional:
+
+- `primarySchoolOrigin`
+- `addressHouseNo` and `addressStreet`
+- `fatherName`, `fatherOccupation` and `isFatherDeceased`
+- `motherName`, `motherOccupation` and `isMotherDeceased`
+
+Write the booleans as `"true"` or `"false"`.
+
+Responses write out `birthPlace` and `address` in full, in Khmer and in Latin script, for example `ភូមិអូរធំ ឃុំបន្ទាយនាង ស្រុកមង្គលបូរី ខេត្តបន្ទាយមានជ័យ`.
+
+- **Changing details:** `PATCH /students/:id` takes JSON.
+- **Replacing a document:** use `PUT /students/:id/photo` or `PUT /students/:id/birth-certificate-scan`. Replacements are audited.
+- **Viewing a document:** use `GET` on the same paths. It needs `VIEW_STUDENT`, because the files are only served through the API.
+- **Showing the photo in a browser:** fetch it with the bearer token and display it as a blob URL.
+
+`GET /locations/...` serves the gazetteer for cascading address pickers, to any signed-in user: provinces, and then the districts, communes and villages under each one, plus a village search by name.
 
 ### Guardians
 

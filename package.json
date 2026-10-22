@@ -11,6 +11,8 @@
     "db:studio": "npx prisma studio",
     "db:seed": "npx prisma db seed",
     "db:seed:students": "tsx src/utils/seed-students.ts",
+    "gazetteer:download": "tsx src/utils/download-gazetteer.ts",
+    "db:seed:gazetteer": "tsx src/utils/seed-gazetteer.ts",
     "db:seed:staff": "tsx src/utils/seed-staff.ts",
     "db:seed:demo": "tsx src/utils/seed-demo.ts",
     "db:reset:demo": "tsx src/utils/seed-demo.ts --reset",
@@ -30,6 +32,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1155.0",
     "@fontsource/battambang": "5.3.0",
     "@fontsource/moul": "5.3.0",
     "@prisma/adapter-pg": "^7.10.1",
@@ -41,13 +44,16 @@
     "express": "^5.3.0",
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
-    "pg": "^8.23.1"
+    "multer": "^2.4.0",
+    "pg": "^8.23.1",
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.3.0",
     "@types/node": "^26.6.5",
     "@types/supertest": "7.2.1",
     "prisma": "^7.10.1",

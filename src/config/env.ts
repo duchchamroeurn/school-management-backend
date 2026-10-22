@@ -7,6 +7,7 @@
 import jwt from 'jsonwebtoken';
 import { isSchoolLevel } from '../constants/school-levels';
 import { SchoolLevel } from '../generated/prisma/client';
+import { readStorageConfig } from './storage';
 
 const env = process.env;
 const problems: string[] = [];
@@ -127,6 +128,9 @@ const schoolLevel = env.SCHOOL_LEVEL?.trim();
 if (schoolLevel && !isSchoolLevel(schoolLevel)) {
   problems.push(`SCHOOL_LEVEL must be one of ${Object.values(SchoolLevel).join(', ')} (got "${schoolLevel}")`);
 }
+
+// ── File storage (MinIO / S3) ─────────────────────────────
+problems.push(...readStorageConfig(env).problems);
 
 if (problems.length) {
   console.error(`Invalid configuration — fix .env (see .env.example):\n  - ${problems.join('\n  - ')}`);

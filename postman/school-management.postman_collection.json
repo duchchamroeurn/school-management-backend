@@ -1512,6 +1512,203 @@
       ]
     },
     {
+      "name": "Locations (gazetteer)",
+      "description": "Provinces › districts › communes › villages with official NCDD codes (province 2 digits, district 4, commune 6, village 8). Read-only, for any signed-in user; imported with npm run db:seed:gazetteer. Use them for cascading address dropdowns; students store the village code.",
+      "item": [
+        {
+          "name": "List provinces",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/locations/provinces",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "locations",
+                "provinces"
+              ]
+            },
+            "description": "25 provinces/capital, with type PROVINCE (ខេត្ត) or CAPITAL (រាជធានី)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Districts of a province",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/locations/provinces/12/districts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "locations",
+                "provinces",
+                "12",
+                "districts"
+              ]
+            },
+            "description": "type DISTRICT (ស្រុក), MUNICIPALITY (ក្រុង) or KHAN (ខណ្ឌ)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Communes of a district",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/locations/districts/1201/communes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "locations",
+                "districts",
+                "1201",
+                "communes"
+              ]
+            },
+            "description": "type COMMUNE (ឃុំ) or SANGKAT (សង្កាត់)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Villages of a commune",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/locations/communes/120101/villages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "locations",
+                "communes",
+                "120101",
+                "villages"
+              ]
+            },
+            "description": "Villages (ភូមិ) of the commune."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search villages",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/locations/villages?search=Ou Thum&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "locations",
+                "villages"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "Ou Thum"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "By Khmer or Latin name (at least 2 characters), with the full address of each."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get village with full address",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/locations/villages/{{birthPlaceVillageCode}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "locations",
+                "villages",
+                "{{birthPlaceVillageCode}}"
+              ]
+            },
+            "description": "The village, its commune, district and province, and the address written out in Khmer and Latin."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Students",
       "description": "Permissions: `LIST_STUDENTS`, `VIEW_STUDENT`, `CREATE_STUDENT`, `UPDATE_STUDENT`, `DELETE_STUDENT`. Students leave via status DROPPED_OUT / GRADUATED; delete is only for records entered by mistake.",
       "item": [
@@ -1519,20 +1716,105 @@
           "name": "Register student",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "body": {
-              "mode": "raw",
-              "raw": "{\n  \"birthCertificateNo\": \"{{birthCertificateNo}}\",\n  \"khmerName\": \"សុខ ចាន់ថា\",\n  \"latinName\": \"Sok Chantha\",\n  \"dateOfBirth\": \"2013-04-14\",\n  \"gender\": \"F\",\n  \"primarySchoolOrigin\": \"Wat Phnom Primary School\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "birthCertificateNo",
+                  "value": "{{birthCertificateNo}}",
+                  "type": "text"
+                },
+                {
+                  "key": "khmerName",
+                  "value": "សុខ ចាន់ថា",
+                  "type": "text"
+                },
+                {
+                  "key": "latinName",
+                  "value": "Sok Chantha",
+                  "type": "text"
+                },
+                {
+                  "key": "dateOfBirth",
+                  "value": "2013-04-14",
+                  "type": "text"
+                },
+                {
+                  "key": "gender",
+                  "value": "F",
+                  "type": "text"
+                },
+                {
+                  "key": "primarySchoolOrigin",
+                  "value": "Wat Phnom Primary School",
+                  "type": "text"
+                },
+                {
+                  "key": "birthPlaceVillageCode",
+                  "value": "{{birthPlaceVillageCode}}",
+                  "type": "text",
+                  "description": "ទីកន្លែងកំណើត — 8-digit gazetteer village code"
+                },
+                {
+                  "key": "addressVillageCode",
+                  "value": "{{addressVillageCode}}",
+                  "type": "text",
+                  "description": "អាសយដ្ឋានបច្ចុប្បន្ន — 8-digit gazetteer village code"
+                },
+                {
+                  "key": "addressHouseNo",
+                  "value": "12B",
+                  "type": "text"
+                },
+                {
+                  "key": "addressStreet",
+                  "value": "271",
+                  "type": "text"
+                },
+                {
+                  "key": "fatherName",
+                  "value": "សុខ ចាន់",
+                  "type": "text"
+                },
+                {
+                  "key": "fatherOccupation",
+                  "value": "កសិករ",
+                  "type": "text"
+                },
+                {
+                  "key": "isFatherDeceased",
+                  "value": "false",
+                  "type": "text"
+                },
+                {
+                  "key": "motherName",
+                  "value": "ម៉ៅ ស្រីនី",
+                  "type": "text"
+                },
+                {
+                  "key": "motherOccupation",
+                  "value": "លក់ដូរ",
+                  "type": "text"
+                },
+                {
+                  "key": "isMotherDeceased",
+                  "value": "false",
+                  "type": "text"
+                },
+                {
+                  "key": "photo",
+                  "type": "file",
+                  "src": "postman/fixtures/student-photo.jpg",
+                  "description": "4x4 photo: JPEG/PNG ≤ 5 MB, roughly square, ≥ 300 px; stored as 472×472 JPEG"
+                },
+                {
+                  "key": "birthCertificateScan",
+                  "type": "file",
+                  "src": "postman/fixtures/birth-certificate.pdf",
+                  "description": "Scan of the សំបុត្រកំណើត: JPEG/PNG/PDF ≤ 10 MB"
                 }
-              }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/students",
@@ -1543,7 +1825,7 @@
                 "students"
               ]
             },
-            "description": "Set `birthCertificateNo` in the environment to a number not yet registered. birthCertificateNo (លេខសំបុត្រកំណើត) is required and unique — registering the same certificate again returns 409 DUPLICATE_STUDENT naming the existing student. Khmer digits are accepted (១២៣/២០១៣ = 123/2013). studentIdentifier (STU-YY-0001) is generated automatically. khmerName must be Khmer script, latinName Latin letters, gender M or F, age 8–30. Saves `studentId`."
+            "description": "multipart/form-data (run from the project folder so the files in postman/fixtures are found). Set `birthCertificateNo` in the environment to a number not yet registered: it is unique, and registering the same certificate again returns 409 DUPLICATE_STUDENT. Khmer digits are accepted (១២៣/២០១៣ = 123/2013).\n\nRequired: birthCertificateNo, khmerName (Khmer script), latinName, dateOfBirth, gender (M/F), birthPlaceVillageCode, addressVillageCode (8-digit gazetteer codes, see Locations), and the files photo and birthCertificateScan. Optional: primarySchoolOrigin, addressHouseNo, addressStreet, fatherName, fatherOccupation, isFatherDeceased, motherName, motherOccupation, isMotherDeceased (\"true\"/\"false\").\n\nThe response has birthPlace / address written out (khmer, latin) and photo / birthCertificateScan download links. studentIdentifier (STU-YY-0001) is generated. Saves `studentId`."
           },
           "event": [
             {
@@ -1552,7 +1834,12 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status 201', () => pm.response.to.have.status(201));",
-                  "if (pm.response.code === 201) pm.environment.set('studentId', pm.response.json().data.id);"
+                  "if (pm.response.code === 201) {",
+                  "  const s = pm.response.json().data;",
+                  "  pm.environment.set('studentId', s.id);",
+                  "  pm.test('address written out', () => pm.expect(s.address.khmer).to.include('ភូមិ'));",
+                  "  pm.test('photo normalised to JPEG', () => pm.expect(s.photo.contentType).to.eql('image/jpeg'));",
+                  "}"
                 ]
               }
             }
@@ -1654,7 +1941,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"latinName\": \"Sok Chanthea\",\n  \"primarySchoolOrigin\": null\n}",
+              "raw": "{\n  \"latinName\": \"Sok Chanthea\",\n  \"primarySchoolOrigin\": null,\n  \"addressVillageCode\": \"{{addressVillageCode}}\",\n  \"addressHouseNo\": null,\n  \"motherOccupation\": \"គ្រូបង្រៀន\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1671,7 +1958,148 @@
                 "{{studentId}}"
               ]
             },
-            "description": "Partial update. studentIdentifier cannot be changed."
+            "description": "Partial update. studentIdentifier cannot be changed.\n\nJSON. Also accepts the address fields (birthPlaceVillageCode, addressVillageCode, addressHouseNo, addressStreet; null clears house number / street) and the parent fields. Photo and birth certificate scan are replaced with their own PUT requests."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get student photo",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/students/{{studentId}}/photo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students",
+                "{{studentId}}",
+                "photo"
+              ]
+            },
+            "description": "The 4x4 photo (472×472 JPEG). VIEW_STUDENT. Responses carry an ETag: send If-None-Match to get 304 when unchanged. In a browser, fetch it with the bearer token and show it as a blob URL (an <img src> cannot send the token)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JPEG', () => pm.expect(pm.response.headers.get('Content-Type')).to.eql('image/jpeg'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Replace student photo",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/students/{{studentId}}/photo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students",
+                "{{studentId}}",
+                "photo"
+              ]
+            },
+            "description": "multipart/form-data with the new photo in \"photo\". UPDATE_STUDENT. The old photo is removed; the change is audited (STUDENT_PHOTO_REPLACED).",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "photo",
+                  "type": "file",
+                  "src": "postman/fixtures/student-photo.jpg"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get birth certificate scan",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/students/{{studentId}}/birth-certificate-scan",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students",
+                "{{studentId}}",
+                "birth-certificate-scan"
+              ]
+            },
+            "description": "The scan of the birth certificate (JPEG/PNG/PDF), inline with a file name like STU-26-0001-birth-certificate.pdf. VIEW_STUDENT."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Replace birth certificate scan",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/students/{{studentId}}/birth-certificate-scan",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students",
+                "{{studentId}}",
+                "birth-certificate-scan"
+              ]
+            },
+            "description": "multipart/form-data with the new scan in \"birthCertificateScan\". UPDATE_STUDENT. Audited as STUDENT_BIRTH_CERTIFICATE_REPLACED.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "birthCertificateScan",
+                  "type": "file",
+                  "src": "postman/fixtures/birth-certificate.pdf"
+                }
+              ]
+            }
           },
           "event": [
             {

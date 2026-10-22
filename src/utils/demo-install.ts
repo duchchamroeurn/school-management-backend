@@ -5,10 +5,12 @@
 //   npm run demo:install -- --level combined   # grades 7–12 (default)
 //   (shortcuts: npm run demo:install:lower | demo:install:upper | demo:install:combined)
 //
-// Steps: base seed → clear previous demo → level COMBINED (only adds grades, so never blocked, and
-// widest age range for importing) → import data/students.json + data/staff.json → switch to the
+// Steps: base seed → gazetteer (downloaded and imported if the database has none) → clear previous demo → level COMBINED (only adds grades, so never blocked, and
+// widest age range for importing) → import data/students.json (missing photos, birth certificate scans and
+// villages get demo placeholders) + data/staff.json → switch to the
 // requested level → build the demo school. Re-runnable; refuses to run with NODE_ENV=production.
 import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { LEVEL_LABEL } from '../constants/school-levels';
 import { SchoolLevel } from '../generated/prisma/client';
@@ -57,18 +59,30 @@ async function setLevel(step: string, level: SchoolLevel) {
   }
 }
 
+// Students need villages for their addresses: import the gazetteer once (downloading it if there is no file)
+async function ensureGazetteer(step: string) {
+  if ((await prisma.village.count()) > 0) {
+    console.log(`\n▶ ${step}\n  ✓ already imported`);
+    return;
+  }
+  if (!existsSync(resolve(ROOT, 'data/gazetteer.json'))) run(`${step}: download`, 'download-gazetteer.ts');
+  run(`${step}: import`, 'seed-gazetteer.ts');
+}
+
 async function main() {
   if (process.env.NODE_ENV === 'production') throw new Error('Refusing to install demo data with NODE_ENV=production');
   const level = parseLevel();
   console.log(`Installing demo school: ${LEVEL_LABEL[level]}`);
 
-  run('1/6 Base data (permissions, roles, settings, subjects, admin)', 'seed.ts');
-  run('2/6 Clear previous demo data', 'seed-demo.ts', '--reset', '--confirm', '--clear');
-  await setLevel('3/6 Temporarily COMBINED (all grades) for importing', SchoolLevel.COMBINED);
-  run('4/6 Import students (data/students.json)', 'seed-students.ts');
-  run('4/6 Import staff (data/staff.json)', 'seed-staff.ts');
-  await setLevel(`5/6 Switch to ${level}`, level);
-  run('6/6 Build demo school', 'seed-demo.ts');
+  run('1/7 Base data (permissions, roles, settings, subjects, admin)', 'seed.ts');
+  await ensureGazetteer('2/7 Gazetteer (provinces, districts, communes, villages)');
+  run('3/7 Clear previous demo data', 'seed-demo.ts', '--reset', '--confirm', '--clear');
+  await setLevel('4/7 Temporarily COMBINED (all grades) for importing', SchoolLevel.COMBINED);
+  // Students without documents or village codes in the file get demo placeholders
+  run('5/7 Import students (data/students.json)', 'seed-students.ts', '--demo-placeholders');
+  run('5/7 Import staff (data/staff.json)', 'seed-staff.ts');
+  await setLevel(`6/7 Switch to ${level}`, level);
+  run('7/7 Build demo school', 'seed-demo.ts');
 
   console.log(`\n✅ Demo installed: ${LEVEL_LABEL[level]}. Log in as demo.principal / demo.registrar / demo.teacher (password above).`);
 }

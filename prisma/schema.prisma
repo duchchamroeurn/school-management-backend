@@ -117,6 +117,23 @@ enum AnnouncementPriority {
 
 // What a school calendar entry is. Holidays and breaks close the school; a make-up day opens it on a day
 // (or shift) the school week normally has off; an event closes it only when closesSchool is set.
+// Administrative divisions of the gazetteer (NCDD). The type decides the Khmer prefix in an address.
+enum ProvinceType {
+  PROVINCE // ខេត្ត
+  CAPITAL // រាជធានី (Phnom Penh)
+}
+
+enum DistrictType {
+  DISTRICT // ស្រុក
+  MUNICIPALITY // ក្រុង
+  KHAN // ខណ្ឌ (in the capital)
+}
+
+enum CommuneType {
+  COMMUNE // ឃុំ
+  SANGKAT // សង្កាត់
+}
+
 enum CalendarEventType {
   PUBLIC_HOLIDAY // ថ្ងៃឈប់សម្រាកសាធារណៈ, e.g. Khmer New Year
   SCHOOL_BREAK // វិស្សមកាល, e.g. the break between semesters
@@ -272,6 +289,7 @@ model User {
   userRoles         UserRole[]
   announcements     Announcement[]     @relation("AnnouncementAuthor")
   announcementReads AnnouncementRead[]
+  uploadedFiles     StoredFile[]
 
   @@map("users")
 }
@@ -370,6 +388,30 @@ model StudentProfile {
   primarySchoolOrigin String?       @map("primary_school_origin") // e.g., "Riverside Primary"
   status              StudentStatus @default(ENROLLED)
 
+  // Parents as written in the registry (ឪពុក / ម្តាយ): name, occupation (មុខរបរ) and whether they have died.
+  // Contact people (phone, Telegram) are the guardians below; a parent who is also the contact is a guardian too.
+  fatherName       String? @map("father_name")
+  fatherOccupation String? @map("father_occupation")
+  isFatherDeceased Boolean @default(false) @map("is_father_deceased")
+  motherName       String? @map("mother_name")
+  motherOccupation String? @map("mother_occupation")
+  isMotherDeceased Boolean @default(false) @map("is_mother_deceased")
+
+  // Place of birth (ទីកន្លែងកំណើត) and current address (អាសយដ្ឋានបច្ចុប្បន្ន), as villages of the gazetteer,
+  // so commune, district and province always match and are spelled the official way
+  birthPlaceVillageCode String  @map("birth_place_village_code")
+  birthPlaceVillage     Village @relation("StudentBirthPlace", fields: [birthPlaceVillageCode], references: [code], onDelete: Restrict)
+  addressVillageCode    String  @map("address_village_code")
+  addressVillage        Village @relation("StudentAddress", fields: [addressVillageCode], references: [code], onDelete: Restrict)
+  addressHouseNo        String? @map("address_house_no") // ផ្ទះលេខ
+  addressStreet         String? @map("address_street") // ផ្លូវ
+
+  // 4x4 photo (normalised JPEG) and scan of the birth certificate (សំបុត្រកំណើត), both required by the registry
+  photoFileId            String     @unique @map("photo_file_id")
+  photo                  StoredFile @relation("StudentPhoto", fields: [photoFileId], references: [id], onDelete: Restrict)
+  birthCertificateFileId String     @unique @map("birth_certificate_file_id")
+  birthCertificateFile   StoredFile @relation("StudentBirthCertificate", fields: [birthCertificateFileId], references: [id], onDelete: Restrict)
+
   // Optional link to Auth User (1-to-1) so the student can sign in. If user is deleted, profile remains.
   userId String? @unique @map("user_id")
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -383,7 +425,31 @@ model StudentProfile {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  @@index([addressVillageCode])
   @@map("student_profiles")
+}
+
+// A file kept in object storage (MinIO / S3). The database holds what is needed to serve and check it;
+// the bytes live in the bucket under objectKey. Files are only served through the API, after a permission check.
+model StoredFile {
+  id           String  @id @default(uuid())
+  objectKey    String  @unique @map("object_key") // e.g. "students/<studentId>/photo-<fileId>.jpg"
+  contentType  String  @map("content_type")
+  size         Int // bytes
+  sha256       String // hex, to detect corruption and identical uploads
+  originalName String? @map("original_name")
+
+  // Who uploaded it (kept if that login is later deleted)
+  uploadedById String? @map("uploaded_by_id")
+  uploadedBy   User?   @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  // What it belongs to
+  studentPhoto            StudentProfile? @relation("StudentPhoto")
+  studentBirthCertificate StudentProfile? @relation("StudentBirthCertificate")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("stored_files")
 }
 
 // A parent or guardian (អាណាព្យាបាល). One record per person, linked to each of their children through
@@ -864,4 +930,63 @@ model AuditLog {
   @@index([actorUserId])
   @@index([action])
   @@map("audit_logs")
+}
+
+// ==========================================
+// GAZETTEER (ភូមិ › ឃុំ/សង្កាត់ › ស្រុក/ក្រុង/ខណ្ឌ › ខេត្ត/រាជធានី)
+// ==========================================
+// Official NCDD codes: province 2 digits, district 4, commune 6, village 8; each starts with its parent's code.
+// Imported with `npm run db:seed:gazetteer` (and refreshed by re-running it); never edited through the API.
+
+model Province {
+  code      String       @id @db.VarChar(2) // e.g. "12" = Phnom Penh
+  type      ProvinceType
+  khmerName String       @map("khmer_name") // without the prefix, e.g. "ភ្នំពេញ"
+  latinName String       @map("latin_name")
+
+  districts District[]
+
+  @@map("provinces")
+}
+
+model District {
+  code         String       @id @db.VarChar(4)
+  provinceCode String       @map("province_code") @db.VarChar(2)
+  province     Province     @relation(fields: [provinceCode], references: [code], onDelete: Restrict)
+  type         DistrictType
+  khmerName    String       @map("khmer_name")
+  latinName    String       @map("latin_name")
+
+  communes Commune[]
+
+  @@index([provinceCode])
+  @@map("districts")
+}
+
+model Commune {
+  code         String      @id @db.VarChar(6)
+  districtCode String      @map("district_code") @db.VarChar(4)
+  district     District    @relation(fields: [districtCode], references: [code], onDelete: Restrict)
+  type         CommuneType
+  khmerName    String      @map("khmer_name")
+  latinName    String      @map("latin_name")
+
+  villages Village[]
+
+  @@index([districtCode])
+  @@map("communes")
+}
+
+model Village {
+  code        String  @id @db.VarChar(8)
+  communeCode String  @map("commune_code") @db.VarChar(6)
+  commune     Commune @relation(fields: [communeCode], references: [code], onDelete: Restrict)
+  khmerName   String  @map("khmer_name")
+  latinName   String  @map("latin_name")
+
+  bornHere  StudentProfile[] @relation("StudentBirthPlace")
+  livesHere StudentProfile[] @relation("StudentAddress")
+
+  @@index([communeCode])
+  @@map("villages")
 }

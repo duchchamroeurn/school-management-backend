@@ -16,6 +16,28 @@ services:
       timeout: 5s
       retries: 10
 
+  # Object storage for uploaded files (student photos, birth certificate scans). The bucket is private: files
+  # reach users only through the API, after a permission check. MinIO Inc. stopped publishing Docker images in
+  # 2025; this is a maintained community build of the same server (set MINIO_IMAGE to use another one).
+  minio:
+    image: ${MINIO_IMAGE:-pgsty/minio:RELEASE.2026-08-04T00-00-00Z}
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:?S3_ACCESS_KEY must be set in .env}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?S3_SECRET_KEY must be set in .env}
+    # Only reachable from this machine: the API on the host (npm run dev), the import scripts and the web console
+    ports:
+      - "127.0.0.1:${MINIO_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   # One-off job: syncs prisma/schema.prisma to the database, seeds default data, then exits
   migrate:
     build:
@@ -48,6 +70,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-school}:${POSTGRES_PASSWORD:-school}@db:5432/${POSTGRES_DB:-school_management}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
       CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS must be set in .env}
+      S3_ENDPOINT: http://minio:9000
     ports:
       - "${API_PORT:-3000}:3000"
     # Healthy only while the API and its database both answer (the slim image has no curl, so use node)
@@ -60,6 +83,8 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      minio:
+        condition: service_healthy
 
   # Backs up the database when it starts and every night at BACKUP_TIME, keeping BACKUP_KEEP_DAYS days.
   # Point BACKUP_DIR at a different disk than the database, or one disk failure still loses both.
@@ -88,5 +113,31 @@ services:
       db:
         condition: service_healthy
 
+  # Copies the uploaded files to BACKUP_DIR/files when it starts and every night at BACKUP_TIME
+  files-backup:
+    image: pgsty/mc:RELEASE.2026-09-16T00-00-00Z
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/files-backup.sh"]
+    environment:
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?S3_ACCESS_KEY must be set in .env}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?S3_SECRET_KEY must be set in .env}
+      S3_BUCKET: ${S3_BUCKET:-school-files}
+      TZ: ${TZ:-Asia/Phnom_Penh}
+      BACKUP_TIME: ${BACKUP_TIME:-02:00}
+    volumes:
+      - ./docker/files-backup.sh:/files-backup.sh:ro
+      - ${BACKUP_DIR:-./backups}/files:/backups/files
+    # Unhealthy if the last good copy is more than 25 hours old
+    healthcheck:
+      test: ["CMD-SHELL", "test $$(( $$(date +%s) - $$(cat /backups/files/.last-success 2>/dev/null || echo 0) )) -lt 90000"]
+      interval: 1h
+      start_period: 5m
+      start_interval: 30s
+    depends_on:
+      minio:
+        condition: service_healthy
+
 volumes:
   pgdata:
+  miniodata:

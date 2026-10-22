@@ -1,6 +1,7 @@
 // Test fixtures, built with the real services so they follow the same rules as production data.
 // Every helper makes uniquely named records, so tests don't depend on each other or on run order.
 import bcrypt from 'bcrypt';
+import sharp from 'sharp';
 import request from 'supertest';
 import app from '../src/app';
 import { Gender } from '../src/generated/prisma/client';
@@ -40,9 +41,29 @@ export async function makeClass(gradeNumber: number, { year = '2026-2027', capac
   return createClassSection({ sectionName: uid().slice(-6), maxCapacity: capacity, gradeId: grade.id, academicYearId: academicYear.id, homeroomTeacherId });
 }
 
-export function makeStudent({ gender = Gender.F, dateOfBirth = new Date('2013-05-01') }: { gender?: Gender; dateOfBirth?: Date } = {}) {
+// Villages of the test gazetteer (see global setup): two in commune 990101, one in sangkat 990102
+export const VILLAGES = { kandal: '99010101', tboung: '99010102', cheung: '99010201' } as const;
+
+/** A plain image of the given size, e.g. a 4x4 photo (square) or a passport photo (3:4) */
+export const image = (width = 600, height = 600, format: 'jpeg' | 'png' = 'jpeg') =>
+  sharp({ create: { width, height, channels: 3, background: '#88aacc' } })[format]().toBuffer();
+
+/** The smallest file that starts like a PDF (the API checks the signature, not the content) */
+export const PDF = Buffer.from('%PDF-1.4\n1 0 obj << >> endobj\ntrailer << >>\n%%EOF\n');
+
+export async function makeStudent({ gender = Gender.F, dateOfBirth = new Date('2013-05-01') }: { gender?: Gender; dateOfBirth?: Date } = {}) {
   const id = uid();
-  return createStudent({ birthCertificateNo: `BC${id}`, khmerName: 'សិស្ស សាកល្បង', latinName: `Student ${id}`, dateOfBirth, gender });
+  return createStudent({
+    birthCertificateNo: `BC${id}`,
+    khmerName: 'សិស្ស សាកល្បង',
+    latinName: `Student ${id}`,
+    dateOfBirth,
+    gender,
+    birthPlaceVillageCode: VILLAGES.kandal,
+    addressVillageCode: VILLAGES.tboung,
+    photo: { buffer: await image() },
+    birthCertificateScan: { buffer: PDF },
+  });
 }
 
 /** Students enrolled (as new admissions) in the class */
