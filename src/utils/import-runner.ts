@@ -1,6 +1,6 @@
-// Shared runner for the JSON data imports (db:seed:students, db:seed:staff).
+// Shared runner for the JSON data imports (db:seed:students, db:seed:staff, db:seed:holidays).
 // 1. Validate every entry first (same rules as the API); if any is invalid, import nothing.
-// 2. Skip entries whose unique key (birth certificate / national ID) is already registered.
+// 2. Skip entries whose unique key (birth certificate / national ID / holiday date) is already registered.
 // 3. Create the rest in file order through the normal service layer.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -16,6 +16,10 @@ export interface ImportConfig<Input, Created> {
   findExisting: (keys: string[]) => Promise<Map<string, string>>; // key → description of existing record
   create: (input: Input) => Promise<Created>;
   describe: (created: Created) => string;
+  // Where the list is in the file when it isn't a top-level array, e.g. (json) => json.holidays
+  entriesOf?: (json: unknown) => unknown;
+  // How an entry is named in messages (default: its latinName)
+  labelOf?: (raw: Record<string, unknown>) => string;
 }
 
 export async function runImport<Input, Created>(config: ImportConfig<Input, Created>) {
@@ -30,7 +34,8 @@ export async function runImport<Input, Created>(config: ImportConfig<Input, Crea
     } catch (err) {
       throw new Error(`${filePath} could not be read as JSON: ${(err as Error).message}`);
     }
-    if (!Array.isArray(entries)) throw new Error(`${filePath} must contain a JSON array`);
+    if (config.entriesOf) entries = config.entriesOf(entries);
+    if (!Array.isArray(entries)) throw new Error(`${filePath} must contain a JSON array of ${config.label}s`);
     console.log(`Read ${entries.length} ${config.label}(s) from ${filePath}${dryRun ? ' (dry run)' : ''}`);
 
     // 1. Validate everything before touching the database
@@ -38,7 +43,8 @@ export async function runImport<Input, Created>(config: ImportConfig<Input, Crea
     const valid: { line: string; input: Input }[] = [];
     const seenKeys = new Map<string, string>();
     entries.forEach((raw, i) => {
-      const line = `#${i + 1} ${(raw as Record<string, unknown>)?.latinName ?? ''}`.trim();
+      const name = config.labelOf && typeof raw === 'object' && raw !== null ? config.labelOf(raw as Record<string, unknown>) : (raw as Record<string, unknown>)?.latinName;
+      const line = `#${i + 1} ${name ?? ''}`.trim();
       try {
         if (typeof raw !== 'object' || raw === null) throw new Error('must be an object');
         const input = config.toInput(raw as Record<string, unknown>);

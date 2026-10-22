@@ -20,7 +20,8 @@
     "demo:install:combined": "tsx src/utils/demo-install.ts --level combined",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "db:seed:holidays": "tsx src/utils/seed-holidays.ts"
   },
   "keywords": [],
   "author": "",
