@@ -1,26 +1,19 @@
 import { Request, Response } from 'express';
-import { Errors } from '../constants/errors';
 import { PERMISSIONS } from '../constants/permissions';
 import { AnnouncementAudience, AnnouncementPriority } from '../generated/prisma/client';
 import * as announcementService from '../services/announcement.service';
-import { bodyOf, optionalBoolean, optionalDateTime, optionalEnum, optionalString, optionalStringArray, pagination, queryString, required } from '../utils/validate';
+import { bodyOf, optionalBoolean, optionalDateTime, optionalEnum, optionalString, optionalStringArray, optionalText, pagination, queryString, required } from '../utils/validate';
 
 const STATUSES = ['SCHEDULED', 'ACTIVE', 'EXPIRED'] as const;
 
-// Plain text up to 5000 characters; inner line breaks are kept, outer spaces trimmed
-function optionalBody(value: unknown) {
-  if (value === undefined) return undefined;
-  if (typeof value !== 'string' || !value.trim()) throw Errors.INVALID_FIELD('body', 'must be a non-empty string');
-  if (value.trim().length > 5000) throw Errors.INVALID_FIELD('body', 'must be at most 5000 characters');
-  return value.trim();
-}
+export const MAX_BODY_LENGTH = 5000;
 
 const nullableDateTime = (value: unknown, field: string) => (value === null || value === '' ? null : optionalDateTime(value, field));
 
 function input(body: Record<string, unknown>) {
   return {
     title: optionalString(body.title, 'title', 150),
-    body: optionalBody(body.body),
+    body: optionalText(body.body, 'body', MAX_BODY_LENGTH),
     priority: optionalEnum(body.priority, 'priority', Object.values(AnnouncementPriority)),
     pinned: optionalBoolean(body.pinned, 'pinned'),
     audience: optionalEnum(body.audience, 'audience', Object.values(AnnouncementAudience)),

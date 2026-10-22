@@ -20,6 +20,14 @@ export function optionalString(value: unknown, field: string, maxLength = 100): 
   return value.trim();
 }
 
+// Longer plain text (e.g. an announcement body): inner line breaks are kept, outer spaces trimmed
+export function optionalText(value: unknown, field: string, maxLength: number): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !value.trim()) throw invalid(field, 'must be a non-empty string');
+  if (value.trim().length > maxLength) throw invalid(field, `must be at most ${maxLength} characters`);
+  return value.trim();
+}
+
 // undefined = not provided, null (or "") = clear the value
 export function nullableString(value: unknown, field: string): string | null | undefined {
   if (value === null || value === '') return null;
