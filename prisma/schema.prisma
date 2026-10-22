@@ -103,6 +103,18 @@ enum LeaveRequestStatus {
   CANCELLED
 }
 
+// Who an announcement is for
+enum AnnouncementAudience {
+  EVERYONE // every signed-in user
+  ROLES // logins holding any of the chosen roles
+  CLASSES // students of the chosen classes, and the teachers of those classes (homeroom or a subject)
+}
+
+enum AnnouncementPriority {
+  NORMAL
+  IMPORTANT // shown first and highlighted
+}
+
 // What a school calendar entry is. Holidays and breaks close the school; a make-up day opens it on a day
 // (or shift) the school week normally has off; an event closes it only when closesSchool is set.
 enum CalendarEventType {
@@ -127,6 +139,75 @@ model SchoolSettings {
   updatedAt DateTime    @updatedAt @map("updated_at")
 
   @@map("school_settings")
+}
+
+// ==========================================
+// ANNOUNCEMENTS
+// ==========================================
+
+// A notice from the school (ការជូនដំណឹង). Visible from publishAt until expiresAt (none = until deleted) to its
+// audience. Pinned announcements stay at the top of everyone's list.
+model Announcement {
+  id        String               @id @default(uuid())
+  title     String
+  body      String // plain text; line breaks are kept
+  priority  AnnouncementPriority @default(NORMAL)
+  pinned    Boolean              @default(false)
+  audience  AnnouncementAudience
+  publishAt DateTime             @map("publish_at")
+  expiresAt DateTime?            @map("expires_at")
+
+  // Kept when the login is deleted, so old announcements still show who posted them
+  authorId String? @map("author_id")
+  author   User?   @relation("AnnouncementAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  roles   AnnouncementRole[] // audience ROLES
+  classes AnnouncementClass[] // audience CLASSES
+  reads   AnnouncementRead[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([publishAt])
+  @@map("announcements")
+}
+
+model AnnouncementRole {
+  announcementId String @map("announcement_id")
+  roleId         String @map("role_id")
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  role         Role         @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([announcementId, roleId])
+  @@index([roleId])
+  @@map("announcement_roles")
+}
+
+model AnnouncementClass {
+  announcementId String @map("announcement_id")
+  classSectionId String @map("class_section_id")
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  classSection ClassSection @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+
+  @@id([announcementId, classSectionId])
+  @@index([classSectionId])
+  @@map("announcement_classes")
+}
+
+// When a user first opened an announcement; what isn't here is unread
+model AnnouncementRead {
+  announcementId String   @map("announcement_id")
+  userId         String   @map("user_id")
+  readAt         DateTime @default(now()) @map("read_at")
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([announcementId, userId])
+  @@index([userId])
+  @@map("announcement_reads")
 }
 
 // ==========================================
@@ -186,9 +267,11 @@ model User {
   updatedAt          DateTime  @updatedAt @map("updated_at")
 
   // Relations (a login belongs to at most one staff OR one student profile)
-  staffProfile   StaffProfile?
-  studentProfile StudentProfile?
-  userRoles      UserRole[]
+  staffProfile      StaffProfile?
+  studentProfile    StudentProfile?
+  userRoles         UserRole[]
+  announcements     Announcement[]     @relation("AnnouncementAuthor")
+  announcementReads AnnouncementRead[]
 
   @@map("users")
 }
@@ -202,6 +285,7 @@ model Role {
   // Relations
   userRoles       UserRole[]
   rolePermissions RolePermission[]
+  announcements   AnnouncementRole[]
 
   @@map("roles")
 }
@@ -428,6 +512,7 @@ model ClassSection {
   attendanceRecords         AttendanceRecord[]
   room                      Room?                      @relation(fields: [roomId], references: [id])
   timetableEntries          TimetableEntry[]
+  announcements             AnnouncementClass[]
 
   // A class section is unique per academic year (e.g., you can't have two 7A's in 2026)
   @@unique([gradeId, sectionName, academicYearId])

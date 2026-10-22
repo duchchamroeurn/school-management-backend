@@ -43,6 +43,17 @@ export function optionalDate(value: unknown, field: string): Date | undefined {
   return date;
 }
 
+// A moment in time as an ISO 8601 string with a time and zone, e.g. "2026-11-01T07:00:00+07:00" or "…Z"
+export function optionalDateTime(value: unknown, field: string): Date | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.test(value)) {
+    throw invalid(field, 'must be a date and time in ISO 8601 format with a time zone, e.g. 2026-11-01T07:00:00+07:00');
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw invalid(field, 'is not a valid date and time');
+  return date;
+}
+
 export function optionalEnum<T extends string>(value: unknown, field: string, allowed: readonly T[]): T | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== 'string' || !allowed.includes(value as T)) throw invalid(field, `must be one of ${allowed.join(', ')}`);

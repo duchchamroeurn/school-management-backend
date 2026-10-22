@@ -28,6 +28,8 @@ export const AUDIT_ACTIONS = {
   // entityId = "school-week"; before/after map each weekday to its morning / afternoon flags
   SchoolWeek: ['SCHOOL_WEEK_UPDATED'],
   CalendarEvent: ['CALENDAR_EVENT_CREATED', 'CALENDAR_EVENT_UPDATED', 'CALENDAR_EVENT_DELETED'],
+  // before/after hold the text, dates and audience (role and class ids)
+  Announcement: ['ANNOUNCEMENT_CREATED', 'ANNOUNCEMENT_UPDATED', 'ANNOUNCEMENT_DELETED'],
   // RULES_*: a subject's scoring rules (SubjectAssessmentConfig + components) in the period
   AssessmentPeriod: [
     'ASSESSMENT_PERIOD_CREATED',

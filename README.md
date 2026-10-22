@@ -255,6 +255,7 @@ All routes are prefixed with `/api/v1`. Except for `/health` and `/auth/login`, 
 | Class sections | CRUD on `/class-sections`, plus `GET /class-sections/:id/roster` and `POST /class-sections/:id/promote` |
 | Timetable | `GET /timetable/classes/:classSectionId`, `PUT/DELETE /timetable/classes/:classSectionId/slots/:timeSlotId`, `GET /timetable/teachers/:staffId`, `GET /timetable/me`, `GET /timetable/quotas`, CRUD on `/timetable/time-slots` |
 | Rooms | CRUD on `/rooms` |
+| Announcements | `GET /announcements/feed`, `GET /announcements/feed/unread-count`, `POST /announcements/feed/read-all`, `POST /announcements/:id/read`, CRUD on `/announcements` |
 | School calendar | `GET /school-calendar?from=&to=`, `GET/PUT /school-calendar/week`, `GET/POST /school-calendar/events`, `PATCH/DELETE /school-calendar/events/:id` |
 | Subject teachers | `GET /assignments/class/:classSectionId`, plus CRUD on `/assignments/subject-teacher` (`PATCH` takes `{ staffId }` to hand the subject to another teacher) |
 | Enrollments | CRUD on `/enrollments` |
@@ -398,6 +399,23 @@ Anyone signed in can read the calendar. Changing it needs `MANAGE_SCHOOL_CALENDA
 **Elsewhere the calendar is used for:**
 - **Leave requests:** each one has `schoolDays` next to `days`, counting only the days the student's class has lessons.
 - **Dashboard:** `attendanceToday` has `schoolDay: { morning, afternoon, closedBy }` and only counts classes whose shift has school today. `myHomeroom.attendanceToday.schoolDay` gives the same for the teacher's class.
+
+### Announcements
+
+Anyone signed in reads the announcements meant for them. Posting, changing and removing them, and the full list with read counts, need `MANAGE_ANNOUNCEMENTS`.
+
+`POST /announcements` takes `{ title, body, audience, roleIds?, classSectionIds?, priority?, pinned?, publishAt?, expiresAt? }`. Dates and times are ISO 8601 with a time zone, e.g. `2026-11-01T07:00:00+07:00`.
+
+| `audience` | Who sees it |
+| --- | --- |
+| `EVERYONE` | Every signed-in user |
+| `ROLES` | Logins holding any of `roleIds` |
+| `CLASSES` | Enrolled students of `classSectionIds`, and those classes' homeroom and subject teachers |
+
+- **When:** an announcement shows from `publishAt` (default: now) until `expiresAt` (none = until deleted).
+- **Order in the feed:** pinned first, then `IMPORTANT`, then newest. Each item has `read: true|false`.
+- **Read tracking:** `POST /announcements/:id/read` marks one read, `POST /announcements/feed/read-all` marks all, and `GET /announcements/feed/unread-count` gives the count for a badge.
+- **Managers:** `GET /announcements?status=SCHEDULED|ACTIVE|EXPIRED` lists every announcement with `recipients` (active logins it is for) and `readCount`.
 
 ### Setting up grading
 

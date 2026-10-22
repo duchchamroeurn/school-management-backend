@@ -221,6 +221,16 @@ const ERROR_DEFS = {
   SAME_CLASS_SECTION: def(400, 'Student is already in this class section'),
 
   // ── Rooms, time slots & timetable ───────────────────────
+  ANNOUNCEMENT_NOT_FOUND: def(404, 'Announcement not found'),
+  ANNOUNCEMENT_AUDIENCE_EMPTY: def(400, (field: string) => `${field} must list at least one ${field === 'roleIds' ? 'role' : 'class'} for this audience`, {
+    code: 'VALIDATION_ERROR',
+    details: (field: string) => ({ field }),
+  }),
+  ANNOUNCEMENT_TARGETS_NOT_FOUND: def(400, (field: string, missing: string[]) => `Some ${field} don't exist: ${missing.join(', ')}`, {
+    code: 'VALIDATION_ERROR',
+    details: (field: string, missing: string[]) => ({ field, missing }),
+  }),
+  ANNOUNCEMENT_DATES_INVALID: def(400, 'expiresAt must be after publishAt', { code: 'VALIDATION_ERROR', details: fieldDetails('expiresAt') }),
   CALENDAR_EVENT_NOT_FOUND: def(404, 'Calendar entry not found'),
   CALENDAR_DATES_INVALID: def(400, 'endDate must be on or after startDate', { code: 'VALIDATION_ERROR', details: fieldDetails('endDate') }),
   CALENDAR_EVENT_TOO_LONG: def(400, (maxDays: number) => `A calendar entry can cover at most ${maxDays} days`, {
