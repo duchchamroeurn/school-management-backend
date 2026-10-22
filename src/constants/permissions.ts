@@ -59,6 +59,8 @@ export const PERMISSIONS = {
   ASSESSMENT: { MANAGE: 'MANAGE_ASSESSMENT_RULES', LOCK: 'LOCK_ASSESSMENT_PERIODS' },
   // Rooms, the bell schedule (time slots) and every class's weekly timetable
   TIMETABLE: { MANAGE: 'MANAGE_TIMETABLE' },
+  // The school week, holidays, breaks, events and make-up days. Anyone signed in may read the calendar
+  CALENDAR: { MANAGE: 'MANAGE_SCHOOL_CALENDAR' },
 } as const;
 
 export type PermissionCode =
@@ -72,7 +74,8 @@ export type PermissionCode =
   | (typeof PERMISSIONS.RESULT)[keyof typeof PERMISSIONS.RESULT]
   | (typeof PERMISSIONS.REPORT_CARD)[keyof typeof PERMISSIONS.REPORT_CARD]
   | (typeof PERMISSIONS.ASSESSMENT)[keyof typeof PERMISSIONS.ASSESSMENT]
-  | typeof PERMISSIONS.TIMETABLE.MANAGE;
+  | typeof PERMISSIONS.TIMETABLE.MANAGE
+  | typeof PERMISSIONS.CALENDAR.MANAGE;
 
 export interface PermissionDefinition {
   module: string;
@@ -107,6 +110,7 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   { module: 'ASSESSMENT', code: 'VIEW_ANY_REPORT_CARDS', description: 'Print report cards for any class' },
   { module: 'ASSESSMENT', code: 'MANAGE_ASSESSMENT_RULES', description: 'Create assessment periods and set how each subject is scored in them' },
   { module: 'ACADEMIC', code: 'MANAGE_TIMETABLE', description: 'Manage rooms, the bell schedule and class timetables' },
+  { module: 'ACADEMIC', code: 'MANAGE_SCHOOL_CALENDAR', description: 'Set the school week and manage public holidays, breaks, school events and make-up days' },
   { module: 'ASSESSMENT', code: 'LOCK_ASSESSMENT_PERIODS', description: 'Lock a period so its scores and results are final, or reopen it' },
 ];
 

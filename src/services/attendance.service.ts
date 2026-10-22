@@ -5,6 +5,7 @@ import { AcademicYearStatus, AttendanceStatus, LeaveRequestStatus, Prisma, Stude
 import { prisma } from '../lib/prisma';
 import { isoDate, todayAtSchool } from '../utils/dates';
 import { audit } from './audit.service';
+import { schoolDayStatus } from './calendar.service';
 
 export interface AttendanceEntryInput {
   studentId: string;
@@ -89,6 +90,9 @@ export async function markClassAttendance(actor: AttendanceActor, input: MarkCla
     if (input.date < academicYear.startDate || input.date > academicYear.endDate) {
       throw Errors.ATTENDANCE_DATE_OUTSIDE_YEAR(date, academicYear.name, isoDate(academicYear.startDate), isoDate(academicYear.endDate));
     }
+    // No attendance on a holiday, a break, or a day the class's shift has no lessons (school calendar)
+    const schoolDay = await schoolDayStatus(tx, input.date, classSection.shift);
+    if (!schoolDay.open) throw Errors.SCHOOL_CLOSED(date, schoolDay.reason!);
 
     // ── Subject attendance: the subject must be taught in this grade ──────
     const subject = subjectId ? await tx.subject.findUnique({ where: { id: subjectId } }) : null;
@@ -229,12 +233,13 @@ export async function getClassAttendance(viewer: AttendanceViewer, classSectionI
     orderBy: { student: { khmerName: 'asc' } },
   });
   const studentIds = enrollments.map((e) => e.studentId);
-  const [records, leaves] = await Promise.all([
+  const [records, leaves, schoolDay] = await Promise.all([
     prisma.attendanceRecord.findMany({ where: { studentId: { in: studentIds }, date, subjectId } }),
     prisma.leaveRequest.findMany({
       where: { studentId: { in: studentIds }, status: LeaveRequestStatus.APPROVED, startDate: { lte: date }, endDate: { gte: date } },
       select: { id: true, studentId: true, startDate: true, endDate: true, reason: true },
     }),
+    schoolDayStatus(prisma, date, classSection.shift),
   ]);
   const recordOf = new Map(records.map((r) => [r.studentId, r]));
   const leaveOf = new Map(leaves.map((l) => [l.studentId, l]));
@@ -254,9 +259,20 @@ export async function getClassAttendance(viewer: AttendanceViewer, classSectionI
   const marked = students.filter((s) => s.status !== null);
 
   return {
-    classSection: { id: classSection.id, name: className, academicYear: classSection.academicYear.name },
+    classSection: { id: classSection.id, name: className, academicYear: classSection.academicYear.name, shift: classSection.shift },
     date: isoDate(date),
     subject: subject && { id: subject.id, code: subject.code, khmerName: subject.khmerName, latinName: subject.latinName },
+    // When the class's shift has no school that day, attendance can't be saved; closedBy is the holiday,
+    // break or event that closed it (null when the school week simply has no lessons then)
+    schoolDay: {
+      open: schoolDay.open,
+      closedBy: schoolDay.closedBy && {
+        id: schoolDay.closedBy.id,
+        type: schoolDay.closedBy.type,
+        khmerName: schoolDay.closedBy.khmerName,
+        latinName: schoolDay.closedBy.latinName,
+      },
+    },
     summary: {
       students: students.length,
       marked: marked.length,

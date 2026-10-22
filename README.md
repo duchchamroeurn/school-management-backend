@@ -255,6 +255,7 @@ All routes are prefixed with `/api/v1`. Except for `/health` and `/auth/login`, 
 | Class sections | CRUD on `/class-sections`, plus `GET /class-sections/:id/roster` and `POST /class-sections/:id/promote` |
 | Timetable | `GET /timetable/classes/:classSectionId`, `PUT/DELETE /timetable/classes/:classSectionId/slots/:timeSlotId`, `GET /timetable/teachers/:staffId`, `GET /timetable/me`, `GET /timetable/quotas`, CRUD on `/timetable/time-slots` |
 | Rooms | CRUD on `/rooms` |
+| School calendar | `GET /school-calendar?from=&to=`, `GET/PUT /school-calendar/week`, `GET/POST /school-calendar/events`, `PATCH/DELETE /school-calendar/events/:id` |
 | Subject teachers | `GET /assignments/class/:classSectionId`, plus CRUD on `/assignments/subject-teacher` (`PATCH` takes `{ staffId }` to hand the subject to another teacher) |
 | Enrollments | CRUD on `/enrollments` |
 
@@ -374,6 +375,25 @@ Both rules are also database constraints, so they hold even if two people edit a
 - `GET /timetable/teachers/:staffId`: a teacher's week across both shifts.
 - `GET /timetable/me`: the signed-in teacher's lessons, or a student's class week.
 - `GET /timetable/quotas`: every class with the lessons still missing to meet its quotas.
+
+### School calendar
+
+Anyone signed in can read the calendar. Changing it needs `MANAGE_SCHOOL_CALENDAR`.
+
+**The school week:** `GET /school-calendar/week` returns the seven weekdays (1 = Monday … 7 = Sunday), each with whether the morning and afternoon shifts are taught. It starts as Monday–Saturday mornings and Monday–Friday afternoons. `PUT /school-calendar/week` takes `{ weekdays: [{ dayOfWeek, morning, afternoon }] }` with all seven days.
+
+**Calendar entries** (`/school-calendar/events`) run from `startDate` to `endDate`, inclusive, and cover one shift (`shift`) or the whole day (no shift):
+
+| `type` | Effect |
+| --- | --- |
+| `PUBLIC_HOLIDAY` | Closes the school. With `recursYearly: true`, repeats on the same dates every year from its first year on (for fixed-date holidays such as 9 November; lunar holidays are entered each year) |
+| `SCHOOL_BREAK` | Closes the school |
+| `SCHOOL_EVENT` | Closes the school only with `closesSchool: true` (e.g. exams, a ceremony) |
+| `MAKEUP_DAY` | Opens a day or shift the school week has off |
+
+`GET /school-calendar?from=&to=` (at most 400 days) returns every date with `morning` and `afternoon` (taught or not) and the entries on it, plus totals (`schoolDays`, `morningDays`, `afternoonDays`, `closedSchoolDays`). A shift is taught when the school week teaches it or a make-up day covers it, unless an entry that closes the school covers it; closing always wins.
+
+**Attendance** can't be recorded when the class's shift has no school that day (`400 SCHOOL_CLOSED`). The attendance sheet (`GET /attendance/class-sections/:id`) says so in `schoolDay: { open, closedBy }`.
 
 ### Setting up grading
 

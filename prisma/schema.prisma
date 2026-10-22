@@ -103,6 +103,15 @@ enum LeaveRequestStatus {
   CANCELLED
 }
 
+// What a school calendar entry is. Holidays and breaks close the school; a make-up day opens it on a day
+// (or shift) the school week normally has off; an event closes it only when closesSchool is set.
+enum CalendarEventType {
+  PUBLIC_HOLIDAY // ថ្ងៃឈប់សម្រាកសាធារណៈ, e.g. Khmer New Year
+  SCHOOL_BREAK // វិស្សមកាល, e.g. the break between semesters
+  SCHOOL_EVENT // e.g. exams, a ceremony, a staff meeting
+  MAKEUP_DAY // ថ្ងៃសិក្សាសងវិញ, e.g. a Saturday afternoon taught to make up for a holiday
+}
+
 // ==========================================
 // SCHOOL SETTINGS (single row, id = 1)
 // ==========================================
@@ -118,6 +127,44 @@ model SchoolSettings {
   updatedAt DateTime    @updatedAt @map("updated_at")
 
   @@map("school_settings")
+}
+
+// ==========================================
+// SCHOOL CALENDAR
+// ==========================================
+
+// The normal school week: which shifts are taught on each weekday (1 = Monday … 7 = Sunday). Always seven
+// rows; created on first use as Monday–Saturday mornings and Monday–Friday afternoons.
+model SchoolWeekday {
+  dayOfWeek Int     @id @map("day_of_week")
+  morning   Boolean @default(false)
+  afternoon Boolean @default(false)
+
+  @@map("school_weekdays")
+}
+
+// A holiday, break, event or make-up day from startDate to endDate, inclusive. Whether a date is a school day
+// is the school week, then make-up days, then anything that closes the school (which wins).
+model CalendarEvent {
+  id           String            @id @default(uuid())
+  type         CalendarEventType
+  khmerName    String            @map("khmer_name")
+  latinName    String?           @map("latin_name")
+  startDate    DateTime          @map("start_date") @db.Date
+  endDate      DateTime          @map("end_date") @db.Date
+  shift        Shift? // null = the whole day
+  closesSchool Boolean           @map("closes_school") // always true for holidays and breaks, false for make-up days
+  // A holiday on the same date every year (e.g. 9 November), repeated in every year's calendar. Holidays that
+  // follow the lunar calendar (Khmer New Year, Pchum Ben, Water Festival) move, so they are entered each year.
+  recursYearly Boolean           @default(false) @map("recurs_yearly")
+  notes        String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([startDate, endDate])
+  @@index([recursYearly])
+  @@map("calendar_events")
 }
 
 // ==========================================

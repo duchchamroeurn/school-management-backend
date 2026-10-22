@@ -25,6 +25,9 @@ export const AUDIT_ACTIONS = {
   Grade: ['GRADE_CREATED', 'GRADE_UPDATED', 'GRADE_DELETED'],
   Subject: ['SUBJECT_CREATED', 'SUBJECT_UPDATED', 'SUBJECT_DELETED', 'SUBJECT_GRADES_ASSIGNED', 'SUBJECT_GRADE_UNASSIGNED', 'SUBJECT_QUOTA_SET'],
   SchoolSettings: ['SCHOOL_SETTINGS_UPDATED'],
+  // entityId = "school-week"; before/after map each weekday to its morning / afternoon flags
+  SchoolWeek: ['SCHOOL_WEEK_UPDATED'],
+  CalendarEvent: ['CALENDAR_EVENT_CREATED', 'CALENDAR_EVENT_UPDATED', 'CALENDAR_EVENT_DELETED'],
   // RULES_*: a subject's scoring rules (SubjectAssessmentConfig + components) in the period
   AssessmentPeriod: [
     'ASSESSMENT_PERIOD_CREATED',

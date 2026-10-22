@@ -221,6 +221,26 @@ const ERROR_DEFS = {
   SAME_CLASS_SECTION: def(400, 'Student is already in this class section'),
 
   // ── Rooms, time slots & timetable ───────────────────────
+  CALENDAR_EVENT_NOT_FOUND: def(404, 'Calendar entry not found'),
+  CALENDAR_DATES_INVALID: def(400, 'endDate must be on or after startDate', { code: 'VALIDATION_ERROR', details: fieldDetails('endDate') }),
+  CALENDAR_EVENT_TOO_LONG: def(400, (maxDays: number) => `A calendar entry can cover at most ${maxDays} days`, {
+    code: 'VALIDATION_ERROR',
+    details: fieldDetails('endDate'),
+  }),
+  CALENDAR_RECURRING_INVALID: def(
+    400,
+    'Only a public holiday within one calendar year can repeat every year',
+    { code: 'VALIDATION_ERROR', details: fieldDetails('recursYearly') },
+  ),
+  CALENDAR_RANGE_TOO_LONG: def(400, (maxDays: number) => `The calendar can be read for at most ${maxDays} days at a time`, {
+    code: 'VALIDATION_ERROR',
+    details: fieldDetails('to'),
+  }),
+  SCHOOL_WEEK_INVALID: def(400, 'weekdays must list each day 1 (Monday) to 7 (Sunday) once, with morning and afternoon true or false', {
+    code: 'VALIDATION_ERROR',
+    details: fieldDetails('weekdays'),
+  }),
+  SCHOOL_WEEK_EMPTY: def(400, 'The school week needs at least one day with classes', { code: 'VALIDATION_ERROR', details: fieldDetails('weekdays') }),
   ROOM_NOT_FOUND: def(404, 'Room not found'),
   ROOM_EXISTS: def(409, (name: string) => `A room named "${name}" already exists`),
   ROOM_IN_USE: def(409, (name: string, classes: number) => `${name} is the home room of ${classes} class(es); move them first`),
@@ -492,6 +512,11 @@ const ERROR_DEFS = {
     code: 'ATTENDANCE_DATE_INVALID',
     details: fieldDetails('date'),
   }),
+  SCHOOL_CLOSED: def(
+    400,
+    (date: string, reason: string) => `${date} is not a school day for this class (${reason})`,
+    { details: (date: string, reason: string) => ({ field: 'date', date, reason }) },
+  ),
   ATTENDANCE_DATE_OUTSIDE_YEAR: def(
     400,
     (date: string, yearName: string, start: string, end: string) => `${date} is outside academic year ${yearName} (${start} – ${end})`,
