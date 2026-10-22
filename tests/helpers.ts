@@ -24,8 +24,11 @@ export const PASSWORD = 'Test@12345';
 const PASSWORD_HASH = bcrypt.hashSync(PASSWORD, 4); // cheap rounds: tests log in a lot
 
 let counter = 0;
+// Differs per test file. The time alone isn't enough: files that fake the clock (attendance, leave) all
+// share one frozen Date.now(), and each file's counter starts at 0, so their ids would collide.
+const FILE_KEY = Math.random().toString(36).slice(2, 6);
 /** Short unique id, e.g. for section names and document numbers */
-export const uid = () => `${Date.now().toString(36).slice(-5)}${(counter++).toString(36)}`.toUpperCase();
+export const uid = () => `${Date.now().toString(36).slice(-5)}${FILE_KEY}${(counter++).toString(36)}`.toUpperCase();
 
 export type RoleName = 'System Admin' | 'Principal' | 'Registrar' | 'Teacher' | 'Student';
 

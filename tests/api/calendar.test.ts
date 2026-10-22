@@ -1,5 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { todayAtSchool } from '../../src/utils/dates';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { api, bearer, makeClass, makeStudentsIn, prisma, staffUser } from '../helpers';
 
 // The calendar is school-wide, so each test uses dates no other test file touches (2031, 2038–2040, March 2027).
@@ -172,10 +171,10 @@ describe('attendance follows the calendar', () => {
   it('says when the class has no school: a holiday, or a day the week has none', async () => {
     const holiday = await sheet('2027-03-10');
     expect(holiday.status).toBe(200);
-    expect(holiday.body.data.schoolDay).toEqual({ open: false, closedBy: expect.objectContaining({ id: holidayId, type: 'PUBLIC_HOLIDAY' }) });
+    expect(holiday.body.data.schoolDay).toEqual({ open: false, outsideYear: false, closedBy: expect.objectContaining({ id: holidayId, type: 'PUBLIC_HOLIDAY' }) });
 
-    expect((await sheet('2027-03-14')).body.data.schoolDay).toEqual({ open: false, closedBy: null }); // a Sunday
-    expect((await sheet('2027-03-11')).body.data.schoolDay).toEqual({ open: true, closedBy: null });
+    expect((await sheet('2027-03-14')).body.data.schoolDay).toEqual({ open: false, outsideYear: false, closedBy: null }); // a Sunday
+    expect((await sheet('2027-03-11')).body.data.schoolDay).toEqual({ open: true, outsideYear: false, closedBy: null });
   });
 
   it('counts a leave request’s school days for the student’s shift', async () => {
@@ -193,20 +192,43 @@ describe('attendance follows the calendar', () => {
 });
 
 describe('the dashboard follows the calendar', () => {
+  // Each test sets its own "today" and signs in after it: a token issued at the real time would be
+  // expired at a faked date in 2027
+  const dashboardOn = async (today: string) => {
+    vi.setSystemTime(new Date(`${today}T03:00:00.000Z`)); // 10:00 in Phnom Penh
+    const viewer = await staffUser('Principal');
+    return { viewer, load: () => api.get('/api/v1/dashboard').set(bearer(viewer.token)) };
+  };
+
+  beforeAll(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+  });
+
+  afterAll(() => {
+    vi.useRealTimers();
+  });
+
+  it('expects no attendance before the academic year starts', async () => {
+    const { load } = await dashboardOn('2026-10-20'); // a Tuesday; 2026-2027 starts on 1 November
+    const res = await load();
+    expect(res.status).toBe(200);
+    expect(res.body.data.sections.attendanceToday).toMatchObject({
+      schoolDay: { morning: false, afternoon: false, outsideYear: true, closedBy: null },
+      classes: 0,
+      classesNotMarked: [],
+    });
+  });
+
   it('expects no class to take attendance on a holiday today, and names it', async () => {
-    const today = todayAtSchool();
-    const holiday = (await createEvent({ type: 'PUBLIC_HOLIDAY', khmerName: 'ថ្ងៃឈប់ថ្ងៃនេះ', startDate: today, endDate: today })).body.data;
-    try {
-      const res = await api.get('/api/v1/dashboard').set(bearer(principal.token));
-      expect(res.status).toBe(200);
-      expect(res.body.data.sections.attendanceToday).toMatchObject({
-        schoolDay: { morning: false, afternoon: false, closedBy: { id: holiday.id, type: 'PUBLIC_HOLIDAY' } },
-        classes: 0,
-        classesNotMarked: [],
-      });
-    } finally {
-      // Other test files read today's dashboard too
-      await api.delete(`/api/v1/school-calendar/events/${holiday.id}`).set(bearer(principal.token));
-    }
+    const today = '2027-04-07'; // a Wednesday no other test file uses
+    const { viewer, load } = await dashboardOn(today);
+    const holiday = (await createEvent({ type: 'PUBLIC_HOLIDAY', khmerName: 'ថ្ងៃឈប់ថ្ងៃនេះ', startDate: today, endDate: today }, viewer.token)).body.data;
+    const res = await load();
+    expect(res.status).toBe(200);
+    expect(res.body.data.sections.attendanceToday).toMatchObject({
+      schoolDay: { morning: false, afternoon: false, outsideYear: false, closedBy: { id: holiday.id, type: 'PUBLIC_HOLIDAY' } },
+      classes: 0,
+      classesNotMarked: [],
+    });
   });
 });

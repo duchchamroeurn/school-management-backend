@@ -241,6 +241,7 @@ export async function getClassAttendance(viewer: AttendanceViewer, classSectionI
     }),
     schoolDayStatus(prisma, date, classSection.shift),
   ]);
+  const outsideYear = date < classSection.academicYear.startDate || date > classSection.academicYear.endDate;
   const recordOf = new Map(records.map((r) => [r.studentId, r]));
   const leaveOf = new Map(leaves.map((l) => [l.studentId, l]));
 
@@ -264,9 +265,11 @@ export async function getClassAttendance(viewer: AttendanceViewer, classSectionI
     subject: subject && { id: subject.id, code: subject.code, khmerName: subject.khmerName, latinName: subject.latinName },
     // When the class's shift has no school that day, attendance can't be saved; closedBy is the holiday,
     // break or event that closed it (null when the school week simply has no lessons then)
+    // outsideYear: the date is before the class's academic year starts or after it ends
     schoolDay: {
-      open: schoolDay.open,
-      closedBy: schoolDay.closedBy && {
+      open: schoolDay.open && !outsideYear,
+      outsideYear,
+      closedBy: outsideYear || !schoolDay.closedBy ? null : {
         id: schoolDay.closedBy.id,
         type: schoolDay.closedBy.type,
         khmerName: schoolDay.closedBy.khmerName,

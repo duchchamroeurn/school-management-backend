@@ -30,6 +30,10 @@ const daysBefore = (iso: string, days: number) => new Date(dateOnly(iso).getTime
 type ClosedBy = Awaited<ReturnType<typeof schoolDayStatus>>['closedBy'];
 const closedByDto = (event: ClosedBy) => event && { id: event.id, type: event.type, khmerName: event.khmerName, latinName: event.latinName };
 
+type YearDates = { id: string; startDate: Date; endDate: Date };
+/** Before the year starts or after it ends there is no school, whatever the calendar says for that weekday. */
+const outsideYear = (year: YearDates, iso: string) => dateOnly(iso) < year.startDate || dateOnly(iso) > year.endDate;
+
 // Students frequently absent: this many unexcused daily absences in the last 30 days
 const FREQUENT_ABSENCE_THRESHOLD = 3;
 
@@ -102,14 +106,16 @@ async function capacitySection(yearId: string) {
  * Daily (gate) attendance today across the school; the denominator is the students actually marked. Only classes
  * whose shift has school today count (school calendar): on a holiday, or a Saturday afternoon, none are expected.
  */
-async function attendanceTodaySection(yearId: string) {
+async function attendanceTodaySection(year: YearDates) {
+  const yearId = year.id;
   const today = todayAtSchool();
   const [morning, afternoon, allClasses] = await Promise.all([
     schoolDayStatus(prisma, dateOnly(today), Shift.MORNING),
     schoolDayStatus(prisma, dateOnly(today), Shift.AFTERNOON),
     prisma.classSection.findMany({ where: { academicYearId: yearId }, include: { grade: true } }),
   ]);
-  const open = { [Shift.MORNING]: morning.open, [Shift.AFTERNOON]: afternoon.open };
+  const outside = outsideYear(year, today);
+  const open = { [Shift.MORNING]: !outside && morning.open, [Shift.AFTERNOON]: !outside && afternoon.open };
   const classes = allClasses.filter((c) => open[c.shift]);
   const groups = await prisma.attendanceRecord.groupBy({
     by: ['classSectionId', 'status'],
@@ -123,7 +129,13 @@ async function attendanceTodaySection(yearId: string) {
   return {
     date: today,
     // closedBy: the holiday, break or event that closed the school today (null on a day the school week has off)
-    schoolDay: { morning: morning.open, afternoon: afternoon.open, closedBy: closedByDto(morning.closedBy ?? afternoon.closedBy) },
+    // outsideYear: today is before the year starts or after it ends, so no class takes attendance
+    schoolDay: {
+      morning: open[Shift.MORNING],
+      afternoon: open[Shift.AFTERNOON],
+      outsideYear: outside,
+      closedBy: outside ? null : closedByDto(morning.closedBy ?? afternoon.closedBy),
+    },
     classes: classes.length,
     classesMarked: marked.size,
     classesNotMarked: classes.filter((c) => !marked.has(c.id)).map((c) => ({ classSectionId: c.id, name: className(c) })),
@@ -272,7 +284,8 @@ async function myScoreEntrySection(staffProfileId: string, yearId: string) {
   return { remainingTotal: rows.reduce((s, r) => s + r.remaining, 0), items: rows };
 }
 
-async function myHomeroomSection(staffProfileId: string, yearId: string) {
+async function myHomeroomSection(staffProfileId: string, year: YearDates) {
+  const yearId = year.id;
   const classSection = await prisma.classSection.findFirst({
     where: { homeroomTeacherId: staffProfileId, academicYearId: yearId },
     include: { grade: true, enrollments: { where: { student: { status: StudentStatus.ENROLLED } }, select: { studentId: true, student: { select: { gender: true, studentIdentifier: true, khmerName: true, latinName: true } } } } },
@@ -309,7 +322,9 @@ async function myHomeroomSection(staffProfileId: string, yearId: string) {
       date: today,
       marked: todayGroups.length > 0,
       // No school for the class today: nothing to mark
-      schoolDay: { open: schoolDay.open, closedBy: closedByDto(schoolDay.closedBy) },
+      schoolDay: outsideYear(year, today)
+        ? { open: false, outsideYear: true, closedBy: null }
+        : { open: schoolDay.open, outsideYear: false, closedBy: closedByDto(schoolDay.closedBy) },
       ...attendanceToday,
     },
     frequentAbsentees: absences
@@ -370,12 +385,12 @@ export async function getDashboard(viewer: DashboardViewer, academicYearId?: str
     ? [
         ['enrollment', has(P.ENROLLMENT.CREATE), () => enrollmentSection(year.id)],
         ['capacity', has(P.ENROLLMENT.CREATE), () => capacitySection(year.id)],
-        ['attendanceToday', has(P.ATTENDANCE.VIEW_ANY), () => attendanceTodaySection(year.id)],
+        ['attendanceToday', has(P.ATTENDANCE.VIEW_ANY), () => attendanceTodaySection(year)],
         ['scoreEntry', has(P.ASSESSMENT.MANAGE) || has(P.SCORE.ENTER_ANY), () => scoreEntrySection(year.id)],
         ['staffing', has(P.CLASS_SECTION.UPDATE) || has(P.STAFF.UPDATE), () => staffingSection(year.id)],
         ['dataQuality', has(P.STUDENT.UPDATE), () => dataQualitySection(year.id)],
         ['myScoreEntry', has(P.SCORE.ENTER) && !!viewer.staffProfileId, () => myScoreEntrySection(viewer.staffProfileId!, year.id)],
-        ['myHomeroom', has(P.SELF_SERVICE.VIEW_OWN_HOMEROOM) && !!viewer.staffProfileId, () => myHomeroomSection(viewer.staffProfileId!, year.id)],
+        ['myHomeroom', has(P.SELF_SERVICE.VIEW_OWN_HOMEROOM) && !!viewer.staffProfileId, () => myHomeroomSection(viewer.staffProfileId!, year)],
         ['myStudent', has(P.SELF_SERVICE.VIEW_OWN_PROFILE), () => myStudentSection(viewer.userId, year.id)],
       ]
     : [];
