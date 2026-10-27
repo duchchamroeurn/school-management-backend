@@ -125,19 +125,23 @@ cp .env.example .env     # then set JWT_SECRET, CORS_ORIGINS and S3_SECRET_KEY
 docker compose up --build
 ```
 
-This starts six services:
+Then open http://localhost:8080. This starts seven services:
 
+- **web**: the web app, built from the frontend repository (school-management-system), on port `8080` (override with `WEB_PORT`). Its nginx serves the app and forwards `/api` to the api service, so browsers use one address. It's expected next to this repository as `../../frontend/school-management-system`; set `FRONTEND_DIR` if it's elsewhere.
 - **db**: PostgreSQL 17 on port `5432`, stored in the `pgdata` volume
 - **migrate**: a one-off job that pushes the schema and seeds default data, then exits
-- **api**: the API on port `3000` (override with `API_PORT`), started once `migrate` succeeds
+- **api**: the API on port `3000` (override with `API_PORT`), started once `migrate` succeeds. It's published on `127.0.0.1` only (`API_BIND`), for scripts, `npm run dev` and Postman on this machine; other computers use the web service.
 - **minio**: object storage for uploaded files (student photos, birth certificate scans), stored in the `miniodata` volume. Its S3 API (`9000`) and web console (`9001`) are published on `127.0.0.1` only. The login is `S3_ACCESS_KEY` / `S3_SECRET_KEY`.
 - **backup**: nightly database backups (see [Backups](#backups))
 - **files-backup**: nightly copy of the uploaded files (see [Backups](#backups))
 
-The web app has its own container in the frontend repository (school-management-system). It joins this Compose
-network and serves the app and the API on one address. Behind it, set `TRUST_PROXY=1` here, so login throttling and the
-audit log see each user's own IP address instead of the container's. Then keep `API_PORT` off the network, for example
-`API_PORT=127.0.0.1:3000`, so nobody can reach the API directly and fake an address.
+Compose sets `TRUST_PROXY=1` for the api service: every browser request comes through the web service's nginx, which
+replaces `X-Forwarded-For` with the real client address. Login throttling and the audit log then see each user's own
+IP address. Without this setting, all users would share nginx's address, and one person's failed logins could lock
+everyone out. Keep `API_BIND` at `127.0.0.1`. If you publish the API more widely (`API_BIND=0.0.0.0`), a client
+reaching it directly could fake its address, so set `TRUST_PROXY` to empty in that case.
+
+To rebuild only the web app after frontend changes: `docker compose up -d --build web`.
 
 MinIO Inc. stopped publishing Docker images in 2025. Compose uses a maintained community build of the same server (`pgsty/minio`). To use another image, set `MINIO_IMAGE`.
 

@@ -71,8 +71,12 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
       CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS must be set in .env}
       S3_ENDPOINT: http://minio:9000
+      # Browsers come through the web service, whose nginx sets X-Forwarded-For to the real client address
+      TRUST_PROXY: ${TRUST_PROXY:-1}
     ports:
-      - "${API_PORT:-3000}:3000"
+      # This machine only by default (scripts, npm run dev, Postman): on the network, browsers use the web service.
+      # Publishing it wider (API_BIND=0.0.0.0) lets a client fake its address unless TRUST_PROXY is emptied.
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-3000}:3000"
     # Healthy only while the API and its database both answer (the slim image has no curl, so use node)
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/v1/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
@@ -85,6 +89,22 @@ services:
         condition: service_completed_successfully
       minio:
         condition: service_healthy
+
+  # The web app (school-management-system): nginx serves it and forwards /api to the api service, so browsers use
+  # one address. Built from the frontend repository; set FRONTEND_DIR if it isn't next to this one as below.
+  web:
+    build:
+      context: ${FRONTEND_DIR:-../../frontend/school-management-system}
+    restart: unless-stopped
+    environment:
+      API_UPSTREAM: http://api:3000
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    # Started with the API but not held back by it: while the API is starting or down, the app still loads and
+    # shows its "can't reach the server" page, then carries on by itself
+    depends_on:
+      api:
+        condition: service_started
 
   # Backs up the database when it starts and every night at BACKUP_TIME, keeping BACKUP_KEEP_DAYS days.
   # Point BACKUP_DIR at a different disk than the database, or one disk failure still loses both.
