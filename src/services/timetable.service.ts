@@ -6,6 +6,7 @@
 //   - golden rule 1: a teacher is in one class per slot (unique constraint on the lesson's teacher)
 // The lesson's teacher is the subject's assigned teacher in that class; syncLessonTeacher keeps it in step
 // when assignments change.
+import { halfDayShift } from '../constants/class-schedule';
 import { Errors } from '../constants/errors';
 import { AcademicYearStatus, Prisma, Shift, StudentStatus } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
@@ -105,7 +106,8 @@ export async function setLesson(classSectionId: string, timeSlotId: string, subj
       const slot = await tx.timeSlot.findUnique({ where: { id: timeSlotId } });
       if (!slot) throw Errors.TIME_SLOT_NOT_FOUND();
       // A full-day class may use any slot; a half-day class only its own shift's
-      if (classSection.shift && slot.shift !== classSection.shift) throw Errors.WRONG_SHIFT(name, classSection.shift, slotLabel(slot));
+      const onlyShift = halfDayShift(classSection.schedule);
+      if (onlyShift && slot.shift !== onlyShift) throw Errors.WRONG_SHIFT(name, onlyShift, slotLabel(slot));
 
       const gradeSubject = classSection.grade.gradeSubjects.find((gs) => gs.subjectId === subjectId);
       if (!gradeSubject) {
@@ -217,7 +219,7 @@ export async function getClassTimetable(classSectionId: string) {
   const classSection = await loadClassForTimetable(prisma, classSectionId);
   const [slots, entries, assignments] = await Promise.all([
     // Full day: every slot of the bell schedule; half day: its shift's
-    prisma.timeSlot.findMany({ where: classSection.shift ? { shift: classSection.shift } : {}, orderBy: SLOT_ORDER }),
+    prisma.timeSlot.findMany({ where: halfDayShift(classSection.schedule) ? { shift: halfDayShift(classSection.schedule)! } : {}, orderBy: SLOT_ORDER }),
     prisma.timetableEntry.findMany({ where: { classSectionId }, include: { subject: { select: subjectSelect }, staffProfile: { select: personSelect } } }),
     prisma.subjectTeacherAssignment.findMany({ where: { classSectionId }, select: { subjectId: true } }),
   ]);
@@ -244,7 +246,7 @@ export async function getClassTimetable(classSectionId: string) {
 
   const required = quotas.reduce((s, q) => s + (q.weeklyPeriods ?? 0), 0);
   return {
-    classSection: { id: classSection.id, name: className(classSection), shift: classSection.shift, room: classSection.room && { id: classSection.room.id, name: classSection.room.name }, academicYear: classSection.academicYear.name },
+    classSection: { id: classSection.id, name: className(classSection), schedule: classSection.schedule, room: classSection.room && { id: classSection.room.id, name: classSection.room.name }, academicYear: classSection.academicYear.name },
     days,
     quotas,
     summary: {
@@ -330,8 +332,8 @@ export async function getQuotaOverview(academicYearId?: string) {
       return {
         classSectionId: c.id,
         name: className(c),
-        shift: c.shift,
-        slots: c.shift ? (slotsPerShift[c.shift] ?? 0) : allSlots,
+        schedule: c.schedule,
+        slots: halfDayShift(c.schedule) ? (slotsPerShift[halfDayShift(c.schedule)!] ?? 0) : allSlots,
         lessons: c.timetableEntries.length,
         quotaPeriods: c.grade.gradeSubjects.reduce((s, gs) => s + (gs.weeklyPeriods ?? 0), 0),
         lessonsWithoutTeacher: c.timetableEntries.filter((e) => !e.staffProfileId).length,

@@ -158,7 +158,7 @@ describe('attendance follows the calendar', () => {
   let holidayId: string;
 
   beforeAll(async () => {
-    classId = (await makeClass(9)).id; // morning shift, in 2026-2027
+    classId = (await makeClass(9)).id; // a full-day class, in 2026-2027
     holidayId = (await createEvent({ type: 'PUBLIC_HOLIDAY', khmerName: 'ថ្ងៃឈប់', latinName: 'March test holiday', startDate: '2027-03-10', endDate: '2027-03-10' })).body.data.id;
   });
 
@@ -179,7 +179,7 @@ describe('attendance follows the calendar', () => {
 
   it('follows the class: full day studies Saturday morning and any half-open day; a half-day class only its shift', async () => {
     const afternoon = await makeClass(9);
-    await api.patch(`/api/v1/class-sections/${afternoon.id}`).set(bearer(principal.token)).send({ shift: 'AFTERNOON' });
+    await api.patch(`/api/v1/class-sections/${afternoon.id}`).set(bearer(principal.token)).send({ schedule: 'AFTERNOON' });
     const sheetOf = (id: string, date: string) => api.get(`/api/v1/attendance/class-sections/${id}`).query({ date }).set(bearer(principal.token));
 
     // Saturday 13 March 2027: mornings only

@@ -1,5 +1,6 @@
 // Attendance (វត្តមាន): daily gate attendance taken by the homeroom teacher (subjectId = null), or attendance
 // for one subject's lesson taken by that subject's teacher. A whole class is marked in one call.
+import { halfDayShift } from '../constants/class-schedule';
 import { Errors } from '../constants/errors';
 import { AcademicYearStatus, AttendanceStatus, LeaveRequestStatus, Prisma, StudentStatus } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
@@ -91,7 +92,7 @@ export async function markClassAttendance(actor: AttendanceActor, input: MarkCla
       throw Errors.ATTENDANCE_DATE_OUTSIDE_YEAR(date, academicYear.name, isoDate(academicYear.startDate), isoDate(academicYear.endDate));
     }
     // No attendance on a holiday, a break, or a day the class has no lessons (school calendar)
-    const schoolDay = await classDayStatus(tx, input.date, classSection.shift);
+    const schoolDay = await classDayStatus(tx, input.date, halfDayShift(classSection.schedule));
     if (!schoolDay.open) throw Errors.SCHOOL_CLOSED(date, schoolDay.reason!);
 
     // ── Subject attendance: the subject must be taught in this grade ──────
@@ -239,7 +240,7 @@ export async function getClassAttendance(viewer: AttendanceViewer, classSectionI
       where: { studentId: { in: studentIds }, status: LeaveRequestStatus.APPROVED, startDate: { lte: date }, endDate: { gte: date } },
       select: { id: true, studentId: true, startDate: true, endDate: true, reason: true },
     }),
-    classDayStatus(prisma, date, classSection.shift),
+    classDayStatus(prisma, date, halfDayShift(classSection.schedule)),
   ]);
   const outsideYear = date < classSection.academicYear.startDate || date > classSection.academicYear.endDate;
   const recordOf = new Map(records.map((r) => [r.studentId, r]));
@@ -260,7 +261,7 @@ export async function getClassAttendance(viewer: AttendanceViewer, classSectionI
   const marked = students.filter((s) => s.status !== null);
 
   return {
-    classSection: { id: classSection.id, name: className, academicYear: classSection.academicYear.name, shift: classSection.shift },
+    classSection: { id: classSection.id, name: className, academicYear: classSection.academicYear.name, schedule: classSection.schedule },
     date: isoDate(date),
     subject: subject && { id: subject.id, code: subject.code, khmerName: subject.khmerName, latinName: subject.latinName },
     // When the class's shift has no school that day, attendance can't be saved; closedBy is the holiday,

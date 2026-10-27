@@ -14,8 +14,8 @@ export interface RoomInput {
 const withActiveClasses = {
   classes: {
     where: { academicYear: { status: AcademicYearStatus.ACTIVE } },
-    select: { id: true, sectionName: true, shift: true, grade: { select: { gradeNumber: true } } },
-    orderBy: { shift: 'asc' },
+    select: { id: true, sectionName: true, schedule: true, grade: { select: { gradeNumber: true } } },
+    orderBy: { schedule: 'asc' },
   },
 } satisfies Prisma.RoomInclude;
 

@@ -1,6 +1,7 @@
 // Leave requests (ច្បាប់ឈប់សម្រាក): recorded as PENDING, then approved, rejected or cancelled by a reviewer.
 // Approving also excuses absences already recorded in its date range (parents often bring the letter after
 // the absence). Cancelling an approved leave reverts exactly the absences it excused.
+import { halfDayShift } from '../constants/class-schedule';
 import { Errors } from '../constants/errors';
 import { AcademicYearStatus, AttendanceStatus, LeaveRequestStatus, Prisma, StudentStatus } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
@@ -36,7 +37,7 @@ const details = {
       khmerName: true,
       latinName: true,
       // Only to find the class shift for counting school days; not sent to clients
-      enrollments: { select: { classSection: { select: { shift: true } }, academicYear: { select: { startDate: true, endDate: true } } } },
+      enrollments: { select: { classSection: { select: { schedule: true } }, academicYear: { select: { startDate: true, endDate: true } } } },
     },
   },
   _count: { select: { excusedAttendance: true } },
@@ -50,7 +51,7 @@ type LeaveWithDetails = Prisma.LeaveRequestGetPayload<{ include: typeof details 
  */
 const shiftOf = (leave: LeaveWithDetails) =>
   leave.student.enrollments.find((e) => e.academicYear.startDate <= leave.startDate && e.academicYear.endDate >= leave.startDate)
-    ?.classSection.shift ?? null;
+    ?.classSection.schedule;
 
 /**
  * Leave requests as sent to clients. `days` counts every calendar day; `schoolDays` only the days the student's
@@ -62,7 +63,8 @@ async function toDtos(db: Prisma.TransactionClient, leaves: LeaveWithDetails[]) 
   const to = new Date(Math.max(...leaves.map((l) => l.endDate.getTime())));
   const countSchoolDays = await schoolDayCounter(db, from, to);
   return leaves.map((full) => {
-    const schoolDays = countSchoolDays(full.startDate, full.endDate, shiftOf(full));
+    const schedule = shiftOf(full);
+    const schoolDays = countSchoolDays(full.startDate, full.endDate, schedule ? halfDayShift(schedule) : null);
     const { _count, student: { enrollments: _enrollments, ...student }, ...leave } = full;
     return {
       ...leave,

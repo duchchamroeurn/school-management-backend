@@ -43,7 +43,8 @@ services:
     build:
       context: .
       target: build
-    command: ["sh", "-c", "npx prisma db push --config prisma7.config.ts && npx prisma db seed --config prisma7.config.ts"]
+    # pre-push.sql first: changes db push can't make without losing data (it does nothing when not needed)
+    command: ["sh", "-c", "npx prisma db execute --file prisma/pre-push.sql --config prisma7.config.ts && npx prisma db push --config prisma7.config.ts && npx prisma db seed --config prisma7.config.ts"]
     # All settings from .env (SCHOOL_LEVEL, SEED_ADMIN_*, …); the values under environment override them
     env_file:
       - path: .env

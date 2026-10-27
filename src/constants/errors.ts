@@ -288,16 +288,16 @@ const ERROR_DEFS = {
   ROOM_NOT_FOUND: def(404, 'Room not found'),
   ROOM_EXISTS: def(409, (name: string) => `A room named "${name}" already exists`),
   ROOM_IN_USE: def(409, (name: string, classes: number) => `${name} is the home room of ${classes} class(es); move them first`),
-  // A full-day class needs its room all day; two half-day classes share one only if they are in different shifts
+  // A full-day class needs its room all day; two half-day classes share one only if one is morning, one afternoon
   ROOM_SHIFT_TAKEN: def(
     409,
-    (room: string, otherClass: string, otherShift: string | null) =>
-      `${room} is already used by class ${otherClass} ${otherShift ? `in the ${otherShift.toLowerCase()} shift` : 'all day'}`,
+    (room: string, otherClass: string, otherSchedule: string) =>
+      `${room} is already used by class ${otherClass} ${otherSchedule === 'FULL_DAY' ? 'all day' : `in the ${otherSchedule.toLowerCase()}`}`,
   ),
   CLASS_HAS_TIMETABLE: def(
     409,
-    (className: string, lessons: number, shift: string) =>
-      `Class ${className} has ${lessons} lesson(s) outside the ${shift.toLowerCase()} shift; remove them before making it a ${shift.toLowerCase()} class`,
+    (className: string, lessons: number, schedule: string) =>
+      `Class ${className} has ${lessons} lesson(s) outside the ${schedule.toLowerCase()}; remove them before making it a ${schedule.toLowerCase()} class`,
   ),
   TIME_SLOT_NOT_FOUND: def(404, 'Time slot not found'),
   TIME_SLOT_EXISTS: def(409, (label: string) => `There is already a time slot for ${label}`),

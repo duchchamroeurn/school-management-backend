@@ -1,9 +1,8 @@
 import { Request, Response } from 'express';
+import { CLASS_SCHEDULES } from '../constants/class-schedule';
+import { Errors } from '../constants/errors';
 import * as classSectionService from '../services/class-section.service';
-import { Shift } from '../generated/prisma/client';
 import { bodyOf, nullableString, optionalEnum, optionalInt, optionalString, queryString, required } from '../utils/validate';
-
-const SHIFTS = Object.values(Shift);
 
 const capacityOf = (value: unknown) => optionalInt(value, 'maxCapacity', 1, classSectionService.MAX_CAPACITY_LIMIT);
 
@@ -21,10 +20,14 @@ export async function get(req: Request<{ id: string }>, res: Response) {
   res.json({ status: 'success', data: await classSectionService.getClassSection(req.params.id) });
 }
 
-// shift: null = the whole day (the default for a new class); MORNING or AFTERNOON = a half-day class
-const shiftOf = (value: unknown) => (value === null ? null : optionalEnum(value, 'shift', SHIFTS));
+// schedule: FULL_DAY (the default for a new class), or MORNING / AFTERNOON for a half-day class. The old `shift`
+// field is refused with a pointer, rather than ignored, so an outdated client notices.
+function scheduleOf(body: Record<string, unknown>) {
+  if ('shift' in body) throw Errors.INVALID_FIELD('shift', 'has been replaced by schedule: FULL_DAY, MORNING or AFTERNOON');
+  return optionalEnum(body.schedule, 'schedule', CLASS_SCHEDULES);
+}
 
-// POST /api/v1/class-sections — shift omitted or null: a full-day class
+// POST /api/v1/class-sections — schedule left out: a full-day class
 export async function create(req: Request, res: Response) {
   const body = bodyOf(req);
   const classSection = await classSectionService.createClassSection({
@@ -33,7 +36,7 @@ export async function create(req: Request, res: Response) {
     gradeId: required(optionalString(body.gradeId, 'gradeId'), 'gradeId'),
     academicYearId: required(optionalString(body.academicYearId, 'academicYearId'), 'academicYearId'),
     homeroomTeacherId: nullableString(body.homeroomTeacherId, 'homeroomTeacherId'),
-    shift: shiftOf(body.shift),
+    schedule: scheduleOf(body),
     roomId: nullableString(body.roomId, 'roomId'),
   });
   res.status(201).json({ status: 'success', data: classSection });
@@ -46,7 +49,7 @@ export async function update(req: Request<{ id: string }>, res: Response) {
     sectionName: optionalString(body.sectionName, 'sectionName', 10),
     maxCapacity: capacityOf(body.maxCapacity),
     homeroomTeacherId: nullableString(body.homeroomTeacherId, 'homeroomTeacherId'),
-    shift: shiftOf(body.shift),
+    schedule: scheduleOf(body),
     roomId: nullableString(body.roomId, 'roomId'),
   });
   res.json({ status: 'success', data: classSection });

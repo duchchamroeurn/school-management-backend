@@ -9,6 +9,7 @@ import { AcademicYearStatus, AttendanceStatus, Gender, LeaveRequestStatus, Shift
 import { prisma } from '../lib/prisma';
 import { todayAtSchool } from '../utils/dates';
 import { classDayStatus, schoolDayStatus } from './calendar.service';
+import { halfDayShift } from '../constants/class-schedule';
 
 export interface DashboardViewer {
   userId: string;
@@ -117,7 +118,10 @@ async function attendanceTodaySection(year: YearDates) {
   const outside = outsideYear(year, today);
   const open = { [Shift.MORNING]: !outside && morning.open, [Shift.AFTERNOON]: !outside && afternoon.open };
   // A full-day class has school when either shift does (e.g. Saturday morning)
-  const classes = allClasses.filter((c) => (c.shift ? open[c.shift] : open[Shift.MORNING] || open[Shift.AFTERNOON]));
+  const classes = allClasses.filter((c) => {
+    const shift = halfDayShift(c.schedule);
+    return shift ? open[shift] : open[Shift.MORNING] || open[Shift.AFTERNOON];
+  });
   const groups = await prisma.attendanceRecord.groupBy({
     by: ['classSectionId', 'status'],
     where: { date: dateOnly(today), subjectId: null, classSectionId: { in: classes.map((c) => c.id) } },
@@ -308,7 +312,7 @@ async function myHomeroomSection(staffProfileId: string, year: YearDates) {
       select: { id: true, name: true, isLocked: true, _count: { select: { results: { where: { enrollment: { classSectionId: classSection.id } } } } } },
       orderBy: { startDate: 'asc' },
     }),
-    classDayStatus(prisma, dateOnly(today), classSection.shift),
+    classDayStatus(prisma, dateOnly(today), halfDayShift(classSection.schedule)),
   ]);
 
   const students = count();

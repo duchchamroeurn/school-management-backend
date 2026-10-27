@@ -59,28 +59,35 @@ describe('golden rule 1: a teacher is in one class at a time', () => {
   });
 });
 
-describe('shifts and quotas', () => {
-  const setShift = (id: string, shift: string | null) => api.patch(`/api/v1/class-sections/${id}`).set(bearer(principal.token)).send({ shift });
+describe('schedules and quotas', () => {
+  const setSchedule = (id: string, schedule: string) => api.patch(`/api/v1/class-sections/${id}`).set(bearer(principal.token)).send({ schedule });
 
   it('gives a new class the whole day: morning and afternoon slots', async () => {
-    expect((await api.get(`/api/v1/class-sections/${c7A.id}`).set(bearer(principal.token))).body.data.shift).toBeNull();
+    expect((await api.get(`/api/v1/class-sections/${c7A.id}`).set(bearer(principal.token))).body.data.schedule).toBe('FULL_DAY');
     expect((await place(c7A.id, 'AFTERNOON-1-1', history.id)).status).toBe(200);
   });
 
   it('keeps a half-day class to its own shift', async () => {
     const morningOnly = await makeClass(7);
-    expect((await setShift(morningOnly.id, 'MORNING')).status).toBe(200);
+    expect((await setSchedule(morningOnly.id, 'MORNING')).status).toBe(200);
     const wrong = await place(morningOnly.id, 'AFTERNOON-1-1', history.id);
     expect(wrong.body.code).toBe('WRONG_SHIFT');
     expect((await place(morningOnly.id, 'MORNING-1-3', history.id)).status).toBe(200);
 
     // Back to a full day is always possible: it only adds slots
-    expect((await setShift(morningOnly.id, null)).status).toBe(200);
+    expect((await setSchedule(morningOnly.id, 'FULL_DAY')).status).toBe(200);
+  });
+
+  it('refuses the old shift field with a pointer to schedule', async () => {
+    const res = await api.patch(`/api/v1/class-sections/${c7A.id}`).set(bearer(principal.token)).send({ shift: 'MORNING' });
+    expect(res.status).toBe(400);
+    expect(res.body.details.field).toBe('shift');
+    expect(res.body.message).toContain('schedule');
   });
 
   it('refuses a half day that would lose lessons of the other shift', async () => {
     // c7A has lessons in both shifts
-    const change = await setShift(c7A.id, 'MORNING');
+    const change = await setSchedule(c7A.id, 'MORNING');
     expect(change.body.code).toBe('CLASS_HAS_TIMETABLE');
     expect(change.status).toBe(409);
   });
@@ -116,16 +123,16 @@ describe('rooms', () => {
     const taken = await setRoom(other.id, roomId);
     expect(taken.body.code).toBe('ROOM_SHIFT_TAKEN');
     expect(taken.body.message).toContain('all day');
-    expect((await setRoom(morning.id, roomId, { shift: 'MORNING' })).body.code).toBe('ROOM_SHIFT_TAKEN');
+    expect((await setRoom(morning.id, roomId, { schedule: 'MORNING' })).body.code).toBe('ROOM_SHIFT_TAKEN');
     expect((await api.delete(`/api/v1/rooms/${roomId}`).set(bearer(principal.token))).body.code).toBe('ROOM_IN_USE');
   });
 
   it('lets a morning and an afternoon class share a room, but not two classes of one shift', async () => {
     const roomId = await newRoom();
     const [morning, afternoon, morning2, fullDay] = await Promise.all([makeClass(9), makeClass(9), makeClass(9), makeClass(9)]);
-    expect((await setRoom(morning.id, roomId, { shift: 'MORNING' })).status).toBe(200);
-    expect((await setRoom(afternoon.id, roomId, { shift: 'AFTERNOON' })).status).toBe(200);
-    expect((await setRoom(morning2.id, roomId, { shift: 'MORNING' })).body.code).toBe('ROOM_SHIFT_TAKEN');
+    expect((await setRoom(morning.id, roomId, { schedule: 'MORNING' })).status).toBe(200);
+    expect((await setRoom(afternoon.id, roomId, { schedule: 'AFTERNOON' })).status).toBe(200);
+    expect((await setRoom(morning2.id, roomId, { schedule: 'MORNING' })).body.code).toBe('ROOM_SHIFT_TAKEN');
     // A full-day class would need the room in both shifts
     expect((await setRoom(fullDay.id, roomId)).body.code).toBe('ROOM_SHIFT_TAKEN');
   });
@@ -139,7 +146,7 @@ describe('reading timetables', () => {
     const [student] = await makeStudentsIn(c7A, 1);
     const studentToken = await tokenFor((await makeLogin('Student', { studentId: student.id })).username);
     const week = await api.get('/api/v1/timetable/me').set(bearer(studentToken));
-    expect(week.body.data).toMatchObject({ type: 'CLASS', classSection: { id: c7A.id, shift: null } });
+    expect(week.body.data).toMatchObject({ type: 'CLASS', classSection: { id: c7A.id, schedule: 'FULL_DAY' } });
     expect(week.body.data.days[0].slots[0].lesson.subject.code).toBe('HISTORY');
   });
 

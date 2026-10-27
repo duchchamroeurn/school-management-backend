@@ -434,12 +434,13 @@ POST /students/:id/guardians
 
 ### Timetable
 
-A class studies the **whole day** by default: every slot of the bell schedule, usually Monday–Friday morning (ព្រឹក) and afternoon (រសៀល), and Saturday morning. Its `shift` is then `null`.
+A class studies the **whole day** by default: every slot of the bell schedule, usually Monday–Friday morning (ព្រឹក) and afternoon (រសៀល), and Saturday morning. Its `schedule` is then `FULL_DAY`.
 
-A school that runs two shifts (វេន) in shared rooms can make a class half-day instead, with `shift` set to `MORNING` or `AFTERNOON`.
+A school that runs two shifts (វេន) in shared rooms can make a class half-day instead, with `schedule` set to `MORNING` or `AFTERNOON`.
 
-- **Shift and room:** set on the class with `PATCH /class-sections/:id { shift, roomId }`. Use `shift: null` for a full day.
-- **Changing the shift:** a class can always become full day. It can become half-day only while it has no lessons in the other shift (`409 CLASS_HAS_TIMETABLE`).
+- **Schedule and room:** set on the class with `PATCH /class-sections/:id { schedule, roomId }`. The `schedule` field replaced `shift` (where `null` meant full day) in October 2026. A request that still sends `shift` is refused with a message pointing to `schedule`.
+- **Upgrading a database:** `prisma/pre-push.sql` moves an existing database over before `db push`. The `migrate` service and `npm run db:push` both run it first. It copies each class's shift into `schedule` (an empty shift becomes `FULL_DAY`), then adds the one-class-per-room-and-schedule index. If two full-day classes shared a room, all but the first lose the room and are named in the output. It does nothing on a database that's already up to date.
+- **Changing the schedule:** a class can always become full day. It can become half-day only while it has no lessons in the other shift (`409 CLASS_HAS_TIMETABLE`).
 - **Converting existing classes:** `npm run db:classes:full-day` (add `-- --dry-run` to preview) makes every half-day class of the open academic years full day. Where two classes shared a room, the morning class keeps it, and the others are listed so they can be given one.
 
 **Rooms:** create them with `POST /rooms`. Each class has a home room. A full-day class has its room to itself for the year. Two half-day classes can share a room only if one is a morning class and the other an afternoon class, which is how a school with two shifts fits more classes than it has rooms (`409 ROOM_SHIFT_TAKEN` otherwise).
