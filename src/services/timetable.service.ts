@@ -104,7 +104,8 @@ export async function setLesson(classSectionId: string, timeSlotId: string, subj
       const name = className(classSection);
       const slot = await tx.timeSlot.findUnique({ where: { id: timeSlotId } });
       if (!slot) throw Errors.TIME_SLOT_NOT_FOUND();
-      if (slot.shift !== classSection.shift) throw Errors.WRONG_SHIFT(name, classSection.shift, slotLabel(slot));
+      // A full-day class may use any slot; a half-day class only its own shift's
+      if (classSection.shift && slot.shift !== classSection.shift) throw Errors.WRONG_SHIFT(name, classSection.shift, slotLabel(slot));
 
       const gradeSubject = classSection.grade.gradeSubjects.find((gs) => gs.subjectId === subjectId);
       if (!gradeSubject) {
@@ -211,11 +212,12 @@ export async function syncLessonTeacher(
 
 // ── Reading timetables ────────────────────────────────────────────────────
 
-/** A class's week: every slot of its shift (lesson or free), plus how each subject stands against its quota */
+/** A class's week: every slot it studies in (lesson or free), plus how each subject stands against its quota */
 export async function getClassTimetable(classSectionId: string) {
   const classSection = await loadClassForTimetable(prisma, classSectionId);
   const [slots, entries, assignments] = await Promise.all([
-    prisma.timeSlot.findMany({ where: { shift: classSection.shift }, orderBy: SLOT_ORDER }),
+    // Full day: every slot of the bell schedule; half day: its shift's
+    prisma.timeSlot.findMany({ where: classSection.shift ? { shift: classSection.shift } : {}, orderBy: SLOT_ORDER }),
     prisma.timetableEntry.findMany({ where: { classSectionId }, include: { subject: { select: subjectSelect }, staffProfile: { select: personSelect } } }),
     prisma.subjectTeacherAssignment.findMany({ where: { classSectionId }, select: { subjectId: true } }),
   ]);
@@ -226,7 +228,7 @@ export async function getClassTimetable(classSectionId: string) {
       .filter((s) => s.dayOfWeek === dayOfWeek)
       .map((s) => {
         const e = bySlot.get(s.id);
-        return { timeSlotId: s.id, period: s.period, startTime: s.startTime, endTime: s.endTime, lesson: e ? { subject: e.subject, teacher: e.staffProfile } : null };
+        return { timeSlotId: s.id, shift: s.shift, period: s.period, startTime: s.startTime, endTime: s.endTime, lesson: e ? { subject: e.subject, teacher: e.staffProfile } : null };
       }),
   }));
 
@@ -250,7 +252,7 @@ export async function getClassTimetable(classSectionId: string) {
       lessons: entries.length,
       freeSlots: slots.length - entries.length,
       quotaPeriods: required,
-      // A week can only meet the quotas if the shift has enough slots for them
+      // A week can only meet the quotas if the class has enough slots for them
       fitsInShift: required <= slots.length,
       subjectsMissingLessons: quotas.filter((q) => q.status === 'MISSING').length,
       lessonsWithoutTeacher: entries.filter((e) => !e.staffProfileId).length,
@@ -317,6 +319,7 @@ export async function getQuotaOverview(academicYearId?: string) {
     orderBy: [{ grade: { gradeNumber: 'asc' } }, { sectionName: 'asc' }],
   });
   const slotsPerShift = Object.fromEntries((await prisma.timeSlot.groupBy({ by: ['shift'], _count: true })).map((g) => [g.shift, g._count]));
+  const allSlots = Object.values(slotsPerShift).reduce((sum, n) => sum + n, 0);
   return {
     academicYear: year.name,
     classes: classes.map((c) => {
@@ -328,7 +331,7 @@ export async function getQuotaOverview(academicYearId?: string) {
         classSectionId: c.id,
         name: className(c),
         shift: c.shift,
-        slots: slotsPerShift[c.shift] ?? 0,
+        slots: c.shift ? (slotsPerShift[c.shift] ?? 0) : allSlots,
         lessons: c.timetableEntries.length,
         quotaPeriods: c.grade.gradeSubjects.reduce((s, gs) => s + (gs.weeklyPeriods ?? 0), 0),
         lessonsWithoutTeacher: c.timetableEntries.filter((e) => !e.staffProfileId).length,

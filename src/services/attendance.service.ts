@@ -5,7 +5,7 @@ import { AcademicYearStatus, AttendanceStatus, LeaveRequestStatus, Prisma, Stude
 import { prisma } from '../lib/prisma';
 import { isoDate, todayAtSchool } from '../utils/dates';
 import { audit } from './audit.service';
-import { schoolDayStatus } from './calendar.service';
+import { classDayStatus } from './calendar.service';
 
 export interface AttendanceEntryInput {
   studentId: string;
@@ -90,8 +90,8 @@ export async function markClassAttendance(actor: AttendanceActor, input: MarkCla
     if (input.date < academicYear.startDate || input.date > academicYear.endDate) {
       throw Errors.ATTENDANCE_DATE_OUTSIDE_YEAR(date, academicYear.name, isoDate(academicYear.startDate), isoDate(academicYear.endDate));
     }
-    // No attendance on a holiday, a break, or a day the class's shift has no lessons (school calendar)
-    const schoolDay = await schoolDayStatus(tx, input.date, classSection.shift);
+    // No attendance on a holiday, a break, or a day the class has no lessons (school calendar)
+    const schoolDay = await classDayStatus(tx, input.date, classSection.shift);
     if (!schoolDay.open) throw Errors.SCHOOL_CLOSED(date, schoolDay.reason!);
 
     // ── Subject attendance: the subject must be taught in this grade ──────
@@ -239,7 +239,7 @@ export async function getClassAttendance(viewer: AttendanceViewer, classSectionI
       where: { studentId: { in: studentIds }, status: LeaveRequestStatus.APPROVED, startDate: { lte: date }, endDate: { gte: date } },
       select: { id: true, studentId: true, startDate: true, endDate: true, reason: true },
     }),
-    schoolDayStatus(prisma, date, classSection.shift),
+    classDayStatus(prisma, date, classSection.shift),
   ]);
   const outsideYear = date < classSection.academicYear.startDate || date > classSection.academicYear.endDate;
   const recordOf = new Map(records.map((r) => [r.studentId, r]));

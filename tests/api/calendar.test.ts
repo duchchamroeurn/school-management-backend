@@ -177,6 +177,21 @@ describe('attendance follows the calendar', () => {
     expect((await sheet('2027-03-11')).body.data.schoolDay).toEqual({ open: true, outsideYear: false, closedBy: null });
   });
 
+  it('follows the class: full day studies Saturday morning and any half-open day; a half-day class only its shift', async () => {
+    const afternoon = await makeClass(9);
+    await api.patch(`/api/v1/class-sections/${afternoon.id}`).set(bearer(principal.token)).send({ shift: 'AFTERNOON' });
+    const sheetOf = (id: string, date: string) => api.get(`/api/v1/attendance/class-sections/${id}`).query({ date }).set(bearer(principal.token));
+
+    // Saturday 13 March 2027: mornings only
+    expect((await sheet('2027-03-13')).body.data.schoolDay).toMatchObject({ open: true });
+    expect((await sheetOf(afternoon.id, '2027-03-13')).body.data.schoolDay).toEqual({ open: false, outsideYear: false, closedBy: null });
+
+    // Friday 12 March 2027: an event closes the afternoon only
+    const event = (await createEvent({ type: 'SCHOOL_EVENT', khmerName: 'ពិធីរសៀល', startDate: '2027-03-12', endDate: '2027-03-12', shift: 'AFTERNOON', closesSchool: true })).body.data;
+    expect((await sheet('2027-03-12')).body.data.schoolDay).toMatchObject({ open: true });
+    expect((await sheetOf(afternoon.id, '2027-03-12')).body.data.schoolDay).toMatchObject({ open: false, closedBy: { id: event.id } });
+  });
+
   it('counts a leave request’s school days for the student’s shift', async () => {
     const classSection = await prisma.classSection.findUniqueOrThrow({ where: { id: classId } });
     const [student] = await makeStudentsIn(classSection, 1);

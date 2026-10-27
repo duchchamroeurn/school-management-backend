@@ -56,7 +56,8 @@ enum EnrollmentType {
   REPEATING
 }
 
-// Half-day shift (វេន): with too few classrooms, classes study either in the morning or in the afternoon
+// Part of the school day (វេន). Time slots and calendar entries belong to one. A class studies the whole day
+// (ClassSection.shift null) unless the school runs two shifts in shared rooms: then a class is MORNING or AFTERNOON.
 enum Shift {
   MORNING // ព្រឹក ~07:00–11:00
   AFTERNOON // រសៀល ~13:00–17:00
@@ -564,9 +565,11 @@ model ClassSection {
   gradeId           String  @map("grade_id")
   academicYearId    String  @map("academic_year_id")
   homeroomTeacherId String? @map("homeroom_teacher_id")
-  // The class only has lessons in this shift's time slots
-  shift             Shift   @default(MORNING)
-  // Home room; a room is shared only by classes of different shifts
+  // When the class studies. null = the whole day: every slot of the bell schedule (usually Monday–Friday morning and
+  // afternoon, and Saturday morning). MORNING or AFTERNOON = a half-day class, only in that shift's slots, for schools
+  // that run two shifts so a morning and an afternoon class can share a room.
+  shift             Shift?
+  // Home room. A full-day class has it to itself; two half-day classes of different shifts may share it.
   roomId            String? @map("room_id")
 
   // Relations
@@ -584,7 +587,8 @@ model ClassSection {
   @@unique([gradeId, sectionName, academicYearId])
   // A teacher is homeroom teacher of at most one class per academic year (NULLs don't conflict)
   @@unique([homeroomTeacherId, academicYearId])
-  // A room holds one morning class and one afternoon class per year at most (NULLs don't conflict)
+  // A room holds one morning class and one afternoon class per year at most (NULLs don't conflict, so a full-day
+  // class having the room to itself is checked by the service)
   @@unique([roomId, shift, academicYearId])
   @@map("class_sections")
 }

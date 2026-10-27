@@ -288,17 +288,23 @@ const ERROR_DEFS = {
   ROOM_NOT_FOUND: def(404, 'Room not found'),
   ROOM_EXISTS: def(409, (name: string) => `A room named "${name}" already exists`),
   ROOM_IN_USE: def(409, (name: string, classes: number) => `${name} is the home room of ${classes} class(es); move them first`),
+  // A full-day class needs its room all day; two half-day classes share one only if they are in different shifts
   ROOM_SHIFT_TAKEN: def(
     409,
-    (room: string, shift: string, otherClass: string) => `${room} is already used by class ${otherClass} in the ${shift.toLowerCase()} shift`,
+    (room: string, otherClass: string, otherShift: string | null) =>
+      `${room} is already used by class ${otherClass} ${otherShift ? `in the ${otherShift.toLowerCase()} shift` : 'all day'}`,
   ),
-  CLASS_HAS_TIMETABLE: def(409, (className: string, lessons: number) => `Class ${className} has ${lessons} lesson(s) in its timetable; clear them before changing its shift`),
+  CLASS_HAS_TIMETABLE: def(
+    409,
+    (className: string, lessons: number, shift: string) =>
+      `Class ${className} has ${lessons} lesson(s) outside the ${shift.toLowerCase()} shift; remove them before making it a ${shift.toLowerCase()} class`,
+  ),
   TIME_SLOT_NOT_FOUND: def(404, 'Time slot not found'),
   TIME_SLOT_EXISTS: def(409, (label: string) => `There is already a time slot for ${label}`),
   TIME_SLOT_OVERLAP: def(409, (label: string, other: string) => `${label} overlaps ${other}`),
   TIME_SLOT_INVALID: def(400, 'endTime must be after startTime (both HH:MM, 24-hour)', { code: 'VALIDATION_ERROR', details: fieldDetails('endTime') }),
   TIME_SLOT_IN_USE: def(409, (label: string, lessons: number) => `${label} has ${lessons} lesson(s) scheduled; remove them first`),
-  WRONG_SHIFT: def(400, (className: string, shift: string, slot: string) => `Class ${className} studies in the ${shift.toLowerCase()} shift, but ${slot} is not`),
+  WRONG_SHIFT: def(400, (className: string, shift: string, slot: string) => `Class ${className} studies only in the ${shift.toLowerCase()} shift, but ${slot} is not`),
   QUOTA_EXCEEDED: def(
     409,
     (subjectName: string, className: string, quota: number) => `${subjectName} already has its ${quota} lesson(s) per week in class ${className} (the MoEYS quota)`,

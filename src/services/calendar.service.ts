@@ -270,3 +270,16 @@ export async function schoolDayStatus(db: Prisma.TransactionClient, date: Date, 
   const reason = status.open ? null : status.closedBy ? status.closedBy.latinName || status.closedBy.khmerName : `no ${shift.toLowerCase()} classes on this weekday`;
   return { open: status.open, reason, closedBy: status.closedBy };
 }
+
+/**
+ * Whether a class has lessons on the date. A half-day class follows its shift; a full-day class (shift null) has
+ * school when either shift is taught, e.g. Saturday morning. When neither is, closedBy names the entry that closed
+ * the day, if one did.
+ */
+export async function classDayStatus(db: Prisma.TransactionClient, date: Date, shift: Shift | null) {
+  if (shift) return schoolDayStatus(db, date, shift);
+  const [morning, afternoon] = await Promise.all([schoolDayStatus(db, date, Shift.MORNING), schoolDayStatus(db, date, Shift.AFTERNOON)]);
+  if (morning.open || afternoon.open) return { open: true, reason: null, closedBy: null };
+  const closedBy = morning.closedBy ?? afternoon.closedBy;
+  return { open: false, reason: closedBy ? closedBy.latinName || closedBy.khmerName : 'no classes on this weekday', closedBy };
+}

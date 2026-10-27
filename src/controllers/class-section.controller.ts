@@ -21,7 +21,10 @@ export async function get(req: Request<{ id: string }>, res: Response) {
   res.json({ status: 'success', data: await classSectionService.getClassSection(req.params.id) });
 }
 
-// POST /api/v1/class-sections
+// shift: null = the whole day (the default for a new class); MORNING or AFTERNOON = a half-day class
+const shiftOf = (value: unknown) => (value === null ? null : optionalEnum(value, 'shift', SHIFTS));
+
+// POST /api/v1/class-sections — shift omitted or null: a full-day class
 export async function create(req: Request, res: Response) {
   const body = bodyOf(req);
   const classSection = await classSectionService.createClassSection({
@@ -30,7 +33,7 @@ export async function create(req: Request, res: Response) {
     gradeId: required(optionalString(body.gradeId, 'gradeId'), 'gradeId'),
     academicYearId: required(optionalString(body.academicYearId, 'academicYearId'), 'academicYearId'),
     homeroomTeacherId: nullableString(body.homeroomTeacherId, 'homeroomTeacherId'),
-    shift: optionalEnum(body.shift, 'shift', SHIFTS),
+    shift: shiftOf(body.shift),
     roomId: nullableString(body.roomId, 'roomId'),
   });
   res.status(201).json({ status: 'success', data: classSection });
@@ -43,7 +46,7 @@ export async function update(req: Request<{ id: string }>, res: Response) {
     sectionName: optionalString(body.sectionName, 'sectionName', 10),
     maxCapacity: capacityOf(body.maxCapacity),
     homeroomTeacherId: nullableString(body.homeroomTeacherId, 'homeroomTeacherId'),
-    shift: optionalEnum(body.shift, 'shift', SHIFTS),
+    shift: shiftOf(body.shift),
     roomId: nullableString(body.roomId, 'roomId'),
   });
   res.json({ status: 'success', data: classSection });

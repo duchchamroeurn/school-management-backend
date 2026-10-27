@@ -13,6 +13,7 @@
     "db:seed:students": "tsx src/utils/seed-students.ts",
     "gazetteer:download": "tsx src/utils/download-gazetteer.ts",
     "db:seed:gazetteer": "tsx src/utils/seed-gazetteer.ts",
+    "db:classes:full-day": "tsx src/utils/convert-classes-full-day.ts",
     "db:seed:staff": "tsx src/utils/seed-staff.ts",
     "db:seed:demo": "tsx src/utils/seed-demo.ts",
     "db:reset:demo": "tsx src/utils/seed-demo.ts --reset",

@@ -44,7 +44,10 @@ const details = {
 
 type LeaveWithDetails = Prisma.LeaveRequestGetPayload<{ include: typeof details }>;
 
-/** The shift of the student's class in the academic year the leave starts in; null when not in a class then. */
+/**
+ * The shift of the student's class in the academic year the leave starts in. null for a full-day class (or no class
+ * then): a day counts when either shift is taught.
+ */
 const shiftOf = (leave: LeaveWithDetails) =>
   leave.student.enrollments.find((e) => e.academicYear.startDate <= leave.startDate && e.academicYear.endDate >= leave.startDate)
     ?.classSection.shift ?? null;

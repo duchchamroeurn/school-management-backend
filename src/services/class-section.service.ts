@@ -9,7 +9,7 @@ export interface CreateClassSectionInput {
   gradeId: string;
   academicYearId: string;
   homeroomTeacherId?: string | null; // StaffProfile id
-  shift?: Shift; // defaults to MORNING
+  shift?: Shift | null; // null (default) = the whole day; MORNING / AFTERNOON = a half-day class
   roomId?: string | null; // home room
 }
 
@@ -18,7 +18,7 @@ export interface UpdateClassSectionInput {
   sectionName?: string;
   maxCapacity?: number;
   homeroomTeacherId?: string | null; // null = remove homeroom teacher
-  shift?: Shift; // only while the class has no lessons in its timetable
+  shift?: Shift | null; // to a half day only while it has no lessons in the other shift
   roomId?: string | null; // null = no home room
 }
 
@@ -79,15 +79,24 @@ export async function assertTeacherFreeForYear(homeroomTeacherId: string, academ
   }
 }
 
-/** A room holds at most one class per shift each year (also a DB unique constraint) */
-async function assertRoomFree(roomId: string, shift: Shift, academicYearId: string, exceptClassSectionId?: string) {
+/**
+ * A room is used all day by a full-day class, so it can't hold any other class that year; two half-day classes
+ * share it only when they are in different shifts (that pair is also a DB unique constraint).
+ */
+async function assertRoomFree(roomId: string, shift: Shift | null, academicYearId: string, exceptClassSectionId?: string) {
   const room = await prisma.room.findUnique({ where: { id: roomId } });
   if (!room) throw Errors.ROOM_NOT_FOUND();
   const other = await prisma.classSection.findFirst({
-    where: { roomId, shift, academicYearId, ...(exceptClassSectionId && { id: { not: exceptClassSectionId } }) },
+    where: {
+      roomId,
+      academicYearId,
+      // A full-day class clashes with anyone; a half-day class with the same shift or a full-day class
+      ...(shift && { OR: [{ shift }, { shift: null }] }),
+      ...(exceptClassSectionId && { id: { not: exceptClassSectionId } }),
+    },
     include: { grade: true },
   });
-  if (other) throw Errors.ROOM_SHIFT_TAKEN(room.name, shift, `${other.grade.gradeNumber}${other.sectionName}`);
+  if (other) throw Errors.ROOM_SHIFT_TAKEN(room.name, `${other.grade.gradeNumber}${other.sectionName}`, other.shift);
 }
 
 async function assertNameFree(gradeId: string, sectionName: string, academicYearId: string, exceptClassSectionId?: string) {
@@ -145,7 +154,7 @@ export async function createClassSection(data: CreateClassSectionInput) {
   const checks = async () => {
     await assertNameFree(grade.id, sectionName, academicYear.id);
     if (data.homeroomTeacherId) await assertTeacherFreeForYear(data.homeroomTeacherId, academicYear.id);
-    if (data.roomId) await assertRoomFree(data.roomId, data.shift ?? Shift.MORNING, academicYear.id);
+    if (data.roomId) await assertRoomFree(data.roomId, data.shift ?? null, academicYear.id);
   };
   if (data.homeroomTeacherId) await assertTeacherExists(data.homeroomTeacherId);
   await checks();
@@ -160,7 +169,7 @@ export async function createClassSection(data: CreateClassSectionInput) {
             gradeId: grade.id,
             academicYearId: academicYear.id,
             homeroomTeacherId: data.homeroomTeacherId ?? null,
-            shift: data.shift,
+            shift: data.shift ?? null,
             roomId: data.roomId ?? null,
           },
           include: classSectionDetails,
@@ -185,12 +194,13 @@ export async function updateClassSection(id: string, data: UpdateClassSectionInp
     }
   }
 
-  if (data.shift !== undefined && data.shift !== existing.shift) {
-    const lessons = await prisma.timetableEntry.count({ where: { classSectionId: id } });
-    if (lessons) throw Errors.CLASS_HAS_TIMETABLE(`${existing.grade.gradeNumber}${existing.sectionName}`, lessons);
+  // Becoming a full-day class only adds slots; becoming a half-day class loses the other shift's lessons
+  if (data.shift && data.shift !== existing.shift) {
+    const lessons = await prisma.timetableEntry.count({ where: { classSectionId: id, timeSlot: { shift: { not: data.shift } } } });
+    if (lessons) throw Errors.CLASS_HAS_TIMETABLE(`${existing.grade.gradeNumber}${existing.sectionName}`, lessons, data.shift);
   }
   const roomId = data.roomId === undefined ? existing.roomId : data.roomId;
-  const shift = data.shift ?? existing.shift;
+  const shift = data.shift === undefined ? existing.shift : data.shift;
 
   const checks = async () => {
     if (sectionName !== undefined) await assertNameFree(existing.gradeId, sectionName, existing.academicYearId, id);

@@ -434,11 +434,15 @@ POST /students/:id/guardians
 
 ### Timetable
 
-Classes study in one of two half-day shifts (វេន): morning (ព្រឹក) or afternoon (រសៀល).
-- **Shift and room:** set on the class with `PATCH /class-sections/:id { shift, roomId }`. The default is morning.
-- **Shift lock:** once a class has lessons, its shift can't change until they're cleared.
+A class studies the **whole day** by default: every slot of the bell schedule, usually Monday–Friday morning (ព្រឹក) and afternoon (រសៀល), and Saturday morning. Its `shift` is then `null`.
 
-**Rooms:** create them with `POST /rooms`. Each class has a home room, and two classes share a room only if they're in different shifts of the same year. This is how a school fits more classes than it has rooms.
+A school that runs two shifts (វេន) in shared rooms can make a class half-day instead, with `shift` set to `MORNING` or `AFTERNOON`.
+
+- **Shift and room:** set on the class with `PATCH /class-sections/:id { shift, roomId }`. Use `shift: null` for a full day.
+- **Changing the shift:** a class can always become full day. It can become half-day only while it has no lessons in the other shift (`409 CLASS_HAS_TIMETABLE`).
+- **Converting existing classes:** `npm run db:classes:full-day` (add `-- --dry-run` to preview) makes every half-day class of the open academic years full day. Where two classes shared a room, the morning class keeps it, and the others are listed so they can be given one.
+
+**Rooms:** create them with `POST /rooms`. Each class has a home room. A full-day class has its room to itself for the year. Two half-day classes can share a room only if one is a morning class and the other an afternoon class, which is how a school with two shifts fits more classes than it has rooms (`409 ROOM_SHIFT_TAKEN` otherwise).
 
 **Bell schedule:** the school's time slots, one per day, shift and period. The seed creates a default if there is none:
 - 5 periods of 45 minutes per shift, with a 15-minute break after period 3.
@@ -449,7 +453,7 @@ Classes study in one of two half-day shifts (វេន): morning (ព្រឹ�
 **MoEYS quotas:** set a subject's lessons per week in a grade with `PATCH /subjects/:id/grades/:gradeId { weeklyPeriods }`, for example Mathematics 5 or Morality 1.
 
 **Placing lessons:** `PUT /timetable/classes/:classSectionId/slots/:timeSlotId { subjectId }` puts a subject in a slot, replacing any lesson there. `DELETE` frees the slot. Both need `MANAGE_TIMETABLE`, which Principal and System Admin hold. Every placement is checked:
-- **Shift:** the slot must be in the class's shift (`400 WRONG_SHIFT`).
+- **Shift:** a half-day class can only use slots of its shift (`400 WRONG_SHIFT`). A full-day class can use any slot.
 - **Grade:** the subject must be taught in the class's grade.
 - **Quota:** the subject can't go over its weekly quota (`409 QUOTA_EXCEEDED`).
 - **Rule 1, teachers:** a teacher teaches one class at a time (`409 TEACHER_CLASH`, naming the other class).
@@ -462,7 +466,7 @@ Both rules are also database constraints, so they hold even if two people edit a
 - **Removing an assignment** keeps the lessons, without a teacher.
 
 **Reading timetables:**
-- `GET /timetable/classes/:classSectionId`: the class's week (every slot, with lesson or free), each subject's quota status (`MET`, `MISSING`, `OVER` or `NO_QUOTA`), and whether the quotas fit in the shift.
+- `GET /timetable/classes/:classSectionId`: the class's week (every slot, with lesson or free), each subject's quota status (`MET`, `MISSING`, `OVER` or `NO_QUOTA`), and whether the quotas fit in the class's slots. Each slot says which shift it's in.
 - `GET /timetable/teachers/:staffId`: a teacher's week across both shifts.
 - `GET /timetable/me`: the signed-in teacher's lessons, or a student's class week.
 - `GET /timetable/quotas`: every class with the lessons still missing to meet its quotas.
@@ -484,11 +488,11 @@ Anyone signed in can read the calendar. Changing it needs `MANAGE_SCHOOL_CALENDA
 
 `GET /school-calendar?from=&to=` (at most 400 days) returns every date with `morning` and `afternoon` (taught or not) and the entries on it, plus totals (`schoolDays`, `morningDays`, `afternoonDays`, `closedSchoolDays`). A shift is taught when the school week teaches it or a make-up day covers it, unless an entry that closes the school covers it; closing always wins.
 
-**Attendance** can't be recorded when the class's shift has no school that day (`400 SCHOOL_CLOSED`). The attendance sheet (`GET /attendance/class-sections/:id`) says so in `schoolDay: { open, closedBy }`.
+**Attendance** can't be recorded when the class has no school that day (`400 SCHOOL_CLOSED`). A full-day class has school when either shift is taught, for example on Saturday morning, or on a day whose afternoon is cancelled. A half-day class follows its shift. The attendance sheet (`GET /attendance/class-sections/:id`) says so in `schoolDay: { open, closedBy }`.
 
 **Elsewhere the calendar is used for:**
 - **Leave requests:** each one has `schoolDays` next to `days`, counting only the days the student's class has lessons.
-- **Dashboard:** `attendanceToday` has `schoolDay: { morning, afternoon, closedBy }` and only counts classes whose shift has school today. `myHomeroom.attendanceToday.schoolDay` gives the same for the teacher's class.
+- **Dashboard:** `attendanceToday` has `schoolDay: { morning, afternoon, closedBy }` and only counts classes that have school today. `myHomeroom.attendanceToday.schoolDay` gives the same for the teacher's class.
 
 ### Announcements
 
