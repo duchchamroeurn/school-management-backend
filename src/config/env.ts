@@ -123,6 +123,26 @@ const log = {
   format: oneOf('LOG_FORMAT', LOG_FORMATS, 'json'),
 };
 
+// ── Reverse proxy ─────────────────────────────────────────
+// Behind a proxy (e.g. the frontend's nginx container) every request comes from the proxy's address, so login
+// throttling and the audit log would see one IP for everyone. TRUST_PROXY tells Express which proxies' X-Forwarded-For
+// to believe: a hop count ("1"), or addresses / names such as "uniquelocal" (private networks, incl. Docker's).
+// Off by default: with it on, a client that can reach the API directly could fake its address.
+function trustProxySetting(): boolean | number | string {
+  const raw = env.TRUST_PROXY?.trim();
+  if (!raw || raw === 'false') return false;
+  if (raw === 'true') {
+    problems.push('TRUST_PROXY=true trusts any client\'s X-Forwarded-For; use a hop count (1) or addresses such as uniquelocal');
+    return false;
+  }
+  if (/^\d+$/.test(raw)) return Number(raw);
+  const parts = raw.split(',').map((p) => p.trim());
+  if (parts.every((p) => /^(loopback|linklocal|uniquelocal|[0-9a-f.:]+(\/\d{1,3})?)$/i.test(p))) return parts.join(',');
+  problems.push(`TRUST_PROXY must be a hop count, or names / addresses such as "uniquelocal" or "172.16.0.0/12" (got "${raw}")`);
+  return false;
+}
+const trustProxy = trustProxySetting();
+
 // ── School (first install only; afterwards the database is the source of truth) ──
 const schoolLevel = env.SCHOOL_LEVEL?.trim();
 if (schoolLevel && !isSchoolLevel(schoolLevel)) {
@@ -143,6 +163,7 @@ export const config = {
   jwtExpiresIn: jwtExpiresIn as NonNullable<jwt.SignOptions['expiresIn']>,
   port,
   corsOrigins,
+  trustProxy,
   login,
   log,
 };

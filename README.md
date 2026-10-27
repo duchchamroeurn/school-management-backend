@@ -134,6 +134,11 @@ This starts six services:
 - **backup**: nightly database backups (see [Backups](#backups))
 - **files-backup**: nightly copy of the uploaded files (see [Backups](#backups))
 
+The web app has its own container in the frontend repository (school-management-system). It joins this Compose
+network and serves the app and the API on one address. Behind it, set `TRUST_PROXY=1` here, so login throttling and the
+audit log see each user's own IP address instead of the container's. Then keep `API_PORT` off the network, for example
+`API_PORT=127.0.0.1:3000`, so nobody can reach the API directly and fake an address.
+
 MinIO Inc. stopped publishing Docker images in 2025. Compose uses a maintained community build of the same server (`pgsty/minio`). To use another image, set `MINIO_IMAGE`.
 
 The containers read all settings from `.env`. Compose builds `DATABASE_URL` from `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB`, so the `DATABASE_URL` in `.env` is only used outside Docker.

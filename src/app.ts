@@ -37,6 +37,9 @@ import { errorHandler, notFound } from './middlewares/errorHandler';
 const app: Application = express();
 
 // Global Middlewares
+// req.ip is the real client behind a trusted proxy (see TRUST_PROXY), for login throttling and the audit log
+app.set('trust proxy', config.trustProxy);
+
 // First, so every request (even a malformed one) gets a request id and a log entry
 app.use(requestContext);
 app.use(requestLogger);
